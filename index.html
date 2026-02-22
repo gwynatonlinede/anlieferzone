@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>anlieferzone</title>
+
+<style>
+  @font-face{
+    font-family:"g1";
+    src:url("fonts/g1.ttf") format("truetype");
+    font-weight:normal;
+    font-style:normal;
+    font-display:swap;
+  }
+
+  :root{
+    --green:#00ff00;
+    --ui-z:2147483647;
+  }
+
+  body{ margin:0; background:var(--green); }
+
+  /* ===== GRID ===== */
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(10, 1fr);
+    position:relative;
+    z-index:1;
+  }
+  .cell{ position:relative; }
+  .cell img{ width:100%; height:auto; display:block; }
+
+  /* ===== HOVER ===== */
+  .hover{
+    position:absolute;
+    top:0; left:0;
+    display:none;
+    z-index:20;
+  }
+  .hover img{
+    width:150px;
+    cursor:pointer;
+    display:block;
+  }
+
+  /* ===== TRACK OVERLAY ===== */
+  #trackOverlay{
+    position:fixed;
+    inset:0;
+    display:none;
+    z-index:2600;
+    background:rgba(0,0,0,0); /* transparent aber klickbar */
+  }
+
+  #trackBg{
+    position:absolute;
+    inset:0;
+    width:100vw;
+    height:100vh;
+    object-fit:contain;
+    z-index:0;
+    pointer-events:none;
+    display:block;
+  }
+
+  #trackOverlay svg{
+    position:absolute;
+    inset:0;
+    width:100vw;
+    height:100vh;
+    display:block;
+    z-index:1;
+  }
+
+  #trackOverlay svg,
+  #trackBg{
+    transform-origin:center center;
+  }
+
+  /* ===== HUD ===== */
+  #raceHud{
+    position:fixed;
+    top:16px;
+    left:50%;
+    transform:translateX(-50%);
+    z-index:var(--ui-z);
+    font-family:"g1", sans-serif;
+    color:var(--green);
+    text-shadow:0 6px 18px rgba(0,0,0,0.35);
+    user-select:none;
+    pointer-events:none;
+    text-transform:uppercase;
+    letter-spacing:0.02em;
+    display:none;
+    text-align:center;
+  }
+  #raceCountdown{ font-size:96px; line-height:0.95; margin-bottom:10px; display:none; }
+  #raceTimers{ font-size:44px; line-height:1.05; }
+  #raceTimers .tRow{ margin:6px 0; }
+  #raceScore{ margin-top:12px; font-size:34px; line-height:1.05; display:none; }
+
+  /* ===== PLAYERS ===== */
+  .player{
+    position:fixed;
+    z-index:2147483646;
+    display:none;
+    pointer-events:none;
+    user-select:none;
+    transform:translate(-50%,-50%) scale(0.82);
+    transform-origin:center center;
+  }
+  #lkw{ width:90px; }
+  #car{ width:70px; }
+
+  /* ===== COORDS ===== */
+  #coords{
+    position:fixed;
+    left:18px;
+    bottom:18px;
+    z-index:var(--ui-z);
+    color:#000;
+    font-family:"g1", sans-serif;
+    font-size:22px;
+    line-height:1.1;
+    user-select:none;
+    pointer-events:none;
+    white-space:pre;
+  }
+
+  /* ===== BOTTOM AREA ===== */
+  #bottomArea{
+    position:relative;
+    width:100%;
+    min-height:320px;
+    background:var(--green);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:40px 24px 70px;
+    box-sizing:border-box;
+  }
+  #bottomButtons{
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    align-items:center;
+    justify-content:center;
+  }
+  .bigBtn{
+    border:none;
+    background:transparent;
+    color:#000;
+    font-family:"g1", sans-serif;
+    font-size:64px;
+    line-height:0.95;
+    cursor:pointer;
+    padding:0;
+    text-transform:uppercase;
+  }
+  .bigBtn:active{ transform:translateY(1px); }
+#blackBox{
+  position:absolute;     /* hängt am #bottomArea */
+  right:70px;            /* Abstand zur rechten Kante wie am Anfang */
+  bottom:0;              /* klebt an der unteren Kante vom BottomArea */
+  width:260px;
+  height:150px;
+  background:#000;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+
+/* Preview-Bild im Kasten */
+#blackPreview{
+  width:100%;
+  height:100%;
+  object-fit:contain;      /* passt komplett rein */
+  display:block;
+  pointer-events:none;
+  user-select:none;
+}
+
+
+  /* ===== PANEL ===== */
+  #panelOverlay{
+    position:fixed;
+    inset:0;
+    display:none;
+    z-index:2000;
+    background:rgba(0,0,0,0.25);
+  }
+  #panel{
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    width:min(1100px, 92vw);
+    height:min(720px, 86vh);
+    background:rgba(255,255,255,0.92);
+    border-radius:14px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.35);
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+  #panelHeader{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:14px 16px;
+    border-bottom:1px solid rgba(0,0,0,0.12);
+  }
+  #panelTitle{
+    font-family:"g1", sans-serif;
+    font-size:28px;
+    color:#000;
+    margin:0;
+    text-transform:uppercase;
+  }
+  #panelClose{
+    border:none;
+    background:transparent;
+    font-family:"g1", sans-serif;
+    font-size:24px;
+    cursor:pointer;
+    color:#000;
+  }
+  #panelBody{
+    padding:16px;
+    overflow:auto;
+    flex:1;
+    color:#000;
+    font-family:system-ui, sans-serif;
+  }
+
+  /* ===== TRACKS GRID ===== */
+  .trackList{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+    gap:18px;
+    align-items:start;
+  }
+  .trackItem{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    padding:10px 8px;
+    border:1px solid rgba(0,0,0,0.12);
+    border-radius:12px;
+    background:rgba(255,255,255,0.7);
+    cursor:pointer;
+    user-select:none;
+  }
+  .trackSvg{ width:100%; height:auto; display:block; }
+  .trackName{
+    font-family:"g1", sans-serif;
+    font-size:28px;
+    line-height:1;
+    color:#000;
+    text-transform:uppercase;
+  }
+
+  /* ===== ARTEFAKT VIEWER ===== */
+  #arteOverlay{
+    position:fixed;
+    inset:0;
+    display:none;
+    z-index:2500;
+    background:#fff;
+  }
+  #arteStage{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:visible;
+    perspective:1200px;
+  }
+  #arteImg{
+    max-width:min(78vw, 980px);
+    max-height:72vh;
+    width:auto;
+    height:auto;
+    display:block;
+    user-select:none;
+    pointer-events:none;
+    position:relative;
+    z-index:2;
+  }
+  .arteSide{
+    position:absolute;
+    top:50%;
+    transform:translateY(-50%);
+    width:min(46vw, 560px);
+    max-height:60vh;
+    height:auto;
+    opacity:0.55;
+    pointer-events:none;
+    user-select:none;
+    z-index:1;
+    filter:drop-shadow(0 18px 36px rgba(0,0,0,0.18));
+  }
+  #arteImgPrev{ left:-14vw; transform:translateY(-50%) scale(0.72) rotateY(22deg); }
+  #arteImgNext{ right:-14vw; transform:translateY(-50%) scale(0.72) rotateY(-22deg); }
+
+  #arteLabel{
+    position:absolute;
+    left:50%;
+    top:56%;
+    transform:translate(-50%, 0);
+    font-family:"g1", sans-serif;
+    font-size:84px;
+    color:var(--green);
+    text-transform:uppercase;
+    letter-spacing:0.02em;
+    pointer-events:none;
+    user-select:none;
+    text-shadow:0 6px 18px rgba(0,0,0,0.25);
+    z-index:3;
+  }
+  .arteArrow{
+    position:absolute;
+    top:26%;
+    width:92px;
+    height:92px;
+    border:none;
+    background:transparent;
+    cursor:pointer;
+    user-select:none;
+    z-index:4;
+  }
+  .arteArrow::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    margin:auto;
+    width:0;
+    height:0;
+    border-top:22px solid transparent;
+    border-bottom:22px solid transparent;
+    filter:drop-shadow(0 6px 14px rgba(0,0,0,0.25));
+  }
+  #artePrev{ left:70px; }
+  #artePrev::before{ border-right:40px solid var(--green); left:26px; }
+  #arteNext{ right:70px; }
+  #arteNext::before{ border-left:40px solid var(--green); right:26px; }
+
+  #arteClose{
+    position:absolute;
+    right:22px;
+    top:16px;
+    border:none;
+    background:transparent;
+    font-family:"g1", sans-serif;
+    font-size:28px;
+    cursor:pointer;
+    color:#000;
+    z-index:5;
+  }
+</style>
+</head>
+
+<body>
+  <div class="grid" id="grid"></div>
+
+  <div id="trackOverlay"></div>
+
+  <!-- HUD -->
+  <div id="raceHud" aria-hidden="true">
+    <div id="raceCountdown">3</div>
+    <div id="raceTimers">
+      <div class="tRow">LKW: <span id="timerLkw">0.000 s</span></div>
+      <div class="tRow">CAR: <span id="timerCar">0.000 s</span></div>
+    </div>
+    <div id="raceScore">
+      Score: LKW: <span id="scoreLkw">—</span> &nbsp;&nbsp; CAR: <span id="scoreCar">—</span>
+    </div>
+  </div>
+
+  <img id="lkw" class="player" src="images/LKW.png" alt="LKW" />
+  <img id="car" class="player" src="images/car.png" alt="car" />
+
+  <div id="coords"></div>
+
+  <section id="bottomArea">
+    <div id="bottomButtons">
+      <button class="bigBtn" id="btnScore">SCOREBOARD</button>
+      <button class="bigBtn" id="btnTracks">TRACKS</button>
+      <button class="bigBtn" id="btnArtef">ARTEFAKTS</button>
+    </div>
+    <div id="blackBox" aria-hidden="true">
+  <img id="blackPreview" alt="" />
+</div>
+
+  </section>
+
+  <!-- Panel -->
+  <div id="panelOverlay">
+    <div id="panel" role="dialog" aria-modal="true">
+      <div id="panelHeader">
+        <h2 id="panelTitle">PANEL</h2>
+        <button id="panelClose">X</button>
+      </div>
+      <div id="panelBody"></div>
+    </div>
+  </div>
+
+  <!-- Artefakte -->
+  <div id="arteOverlay" aria-hidden="true">
+    <button id="arteClose">X</button>
+    <div id="arteStage">
+      <button class="arteArrow" id="artePrev" aria-label="Vorheriges Artefakt"></button>
+
+      <img id="arteImgPrev" class="arteSide" alt="" aria-hidden="true" />
+      <img id="arteImg" alt="Artefakt" />
+      <img id="arteImgNext" class="arteSide" alt="" aria-hidden="true" />
+
+      <div id="arteLabel"></div>
+
+      <button class="arteArrow" id="arteNext" aria-label="Naechstes Artefakt"></button>
+    </div>
+  </div>
+
+<script>
+/* =========================
+   AUDIO: start on first user interaction, loop forever
+   ========================= */
+(() => {
+  let started = false;
+  const audio = new Audio("audio/172.wav");
+  audio.loop = true;
+  audio.preload = "auto";
+  audio.volume = 1.0;
+
+  async function startAudio(){
+    if (started) return;
+    started = true;
+    try { await audio.play(); }
+    catch (err) { started = false; console.warn("Audio blocked, retry on next click", err); }
+  }
+  window.addEventListener("pointerdown", startAudio, { passive:true });
+})();
+
+/* =========================
+   Helpers: IDs A1..J10
+   ========================= */
+const letters = "ABCDEFGHIJ".split("");
+const N = 100;
+
+function idFromIndex(i){
+  const r = Math.floor(i / 10) + 1;
+  const c = i % 10;
+  return letters[c] + r;
+}
+function indexFromId(id){
+  const c = letters.indexOf(id[0]);
+  const r = parseInt(id.slice(1), 10);
+  if (c < 0 || !(r >= 1 && r <= 10)) return 0;
+  return (r - 1) * 10 + c;
+}
+
+/* =========================
+   Coords
+   ========================= */
+const coordsEl = document.getElementById("coords");
+const TL = { lat: 52.39681586505347, lon: 13.047019466511426 };
+const TR = { lat: 52.39669486607658, lon: 13.047427521379081 };
+const BL = { lat: 52.39649282317423, lon: 13.04686925114396  };
+const BR = { lat: 52.39640547927263, lon: 13.04731578189957  };
+const COORD_DECIMALS = 13;
+const MOUSE_SMOOTH = 0.16;
+let mouseTx=0.5, mouseTy=0.5, mouseX=0.5, mouseY=0.5;
+
+function clamp01(v){ return Math.max(0, Math.min(1, v)); }
+function lerp(a,b,t){ return a + (b-a)*t; }
+function bilerp(tl,tr,bl,br,x,y){
+  const top = lerp(tl, tr, x);
+  const bot = lerp(bl, br, x);
+  return lerp(top, bot, y);
+}
+function updateCoords(){
+  const lat = bilerp(TL.lat, TR.lat, BL.lat, BR.lat, mouseX, mouseY);
+  const lon = bilerp(TL.lon, TR.lon, BL.lon, BR.lon, mouseX, mouseY);
+  coordsEl.textContent = lat.toFixed(COORD_DECIMALS) + "," + lon.toFixed(COORD_DECIMALS);
+}
+window.addEventListener("mousemove", (e) => {
+  const w = Math.max(1, innerWidth), h = Math.max(1, innerHeight);
+  mouseTx = clamp01(e.clientX / w);
+  mouseTy = clamp01(e.clientY / h);
+});
+
+/* =========================
+   Grid + hover (click opens track)
+   ========================= */
+const grid = document.getElementById("grid");
+
+for (let i=0; i<N; i++){
+  const id = idFromIndex(i);
+
+  const cell = document.createElement("div");
+  cell.className = "cell";
+
+  const img = document.createElement("img");
+  img.src = `images/${id}.png`;
+  img.alt = id;
+
+  const hover = document.createElement("div");
+  hover.className = "hover";
+
+  const hi = document.createElement("img");
+  hi.src = `images/${id}_hover.png`;
+  hi.alt = id + " hover";
+
+  hover.appendChild(hi);
+  cell.append(img, hover);
+  grid.appendChild(cell);
+
+  let hideTimer = null;
+  const showHover = () => { if (hideTimer) clearTimeout(hideTimer); hover.style.display="block"; };
+  const hideHover = () => { if (hideTimer) clearTimeout(hideTimer); hideTimer=setTimeout(()=>hover.style.display="none", 220); };
+
+  cell.addEventListener("mouseenter", showHover);
+  cell.addEventListener("mouseleave", hideHover);
+  hover.addEventListener("mouseenter", showHover);
+  hover.addEventListener("mouseleave", hideHover);
+
+  hi.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    openTrackById(id);
+  });
+}
+
+/* =========================
+   Panel (Tracks / Scoreboard)
+   ========================= */
+const panelOverlay = document.getElementById("panelOverlay");
+const panelTitle = document.getElementById("panelTitle");
+const panelBody = document.getElementById("panelBody");
+document.getElementById("panelClose").addEventListener("click", closePanel);
+panelOverlay.addEventListener("click", (e)=>{ if (e.target===panelOverlay) closePanel(); });
+
+function openPanel(title, node){
+  panelTitle.textContent = title;
+  panelBody.innerHTML = "";
+  panelBody.appendChild(node);
+  panelOverlay.style.display = "block";
+}
+function closePanel(){
+  panelOverlay.style.display = "none";
+  panelBody.innerHTML = "";
+}
+
+document.getElementById("btnTracks").addEventListener("click", showTracks);
+document.getElementById("btnScore").addEventListener("click", showScoreboard);
+document.getElementById("btnArtef").addEventListener("click", ()=>openArtefaktViewer(0));
+
+function trackSvgPathForId(id){ return `images/${id}_mousetrack.svg`; }
+
+function showTracks(){
+  const wrap = document.createElement("div");
+  wrap.className = "trackList";
+
+  for (let i=0;i<N;i++){
+    const id = idFromIndex(i);
+
+    const item = document.createElement("div");
+    item.className = "trackItem";
+    item.addEventListener("click", ()=>{
+      closePanel();
+      openTrackById(id);
+    });
+
+   const img = document.createElement("img");
+img.className = "trackSvg";
+img.src = `images/${id}_mousetrack.png`;
+img.alt = id;
+img.loading = "lazy";
+
+
+    const name = document.createElement("div");
+    name.className = "trackName";
+    name.textContent = id;
+
+    item.append(img, name);
+    wrap.appendChild(item);
+  }
+
+  openPanel("TRACKS", wrap);
+}
+
+/* =========================
+   Artefakt viewer
+   ========================= */
+const arteOverlay = document.getElementById("arteOverlay");
+const arteImg = document.getElementById("arteImg");
+const arteImgPrev = document.getElementById("arteImgPrev");
+const arteImgNext = document.getElementById("arteImgNext");
+const arteLabel = document.getElementById("arteLabel");
+const artePrev = document.getElementById("artePrev");
+const arteNext = document.getElementById("arteNext");
+document.getElementById("arteClose").addEventListener("click", closeArtefaktViewer);
+
+let arteIndex = 0;
+function artePathForId(id){ return `images/${id}_hover.png`; }
+
+function renderArtefakt(){
+  const id = idFromIndex(arteIndex);
+  const prevId = idFromIndex((arteIndex + 99) % N);
+  const nextId = idFromIndex((arteIndex + 1) % N);
+
+  arteImg.src = artePathForId(id);
+  arteImgPrev.src = artePathForId(prevId);
+  arteImgNext.src = artePathForId(nextId);
+  arteLabel.textContent = id;
+}
+function openArtefaktViewer(startIndex){
+  arteIndex = ((startIndex % N) + N) % N;
+  renderArtefakt();
+  arteOverlay.style.display = "block";
+}
+function closeArtefaktViewer(){ arteOverlay.style.display = "none"; }
+
+artePrev.addEventListener("click",(e)=>{ e.preventDefault(); arteIndex=(arteIndex+99)%N; renderArtefakt(); });
+arteNext.addEventListener("click",(e)=>{ e.preventDefault(); arteIndex=(arteIndex+1)%N; renderArtefakt(); });
+
+/* =========================
+   Track + Race
+   - steering: P1 ArrowUp gas, ArrowLeft/Right steer
+   - steering: P2 W gas, A/D steer
+   ========================= */
+const trackOverlay = document.getElementById("trackOverlay");
+const lkwEl = document.getElementById("lkw");
+const carEl = document.getElementById("car");
+
+const raceHud = document.getElementById("raceHud");
+const raceCountdownEl = document.getElementById("raceCountdown");
+const timerLkwEl = document.getElementById("timerLkw");
+const timerCarEl = document.getElementById("timerCar");
+const raceScoreEl = document.getElementById("raceScore");
+const scoreLkwEl = document.getElementById("scoreLkw");
+const scoreCarEl = document.getElementById("scoreCar");
+
+let svg=null, path=null, length=0;
+let pathIsClosed = true;
+let endToStartDist = 0;
+let startS=0;
+
+// === Bewegung / Steering (einmalig!) ===
+const SPEED = 560;        // px/sec
+const STEER_SPEED = 220;  // deg/sec
+const ALIGN_TOL   = 120;  // breiter = leichter
+
+
+
+// === "virtuelle" Trackbreite (in Pixeln, links/rechts von der Centerline) ===
+const TRACK_HALF_WIDTH = 40;   // <- höher = "breiter"
+const OFF_ACCEL = 900;         // px/s² seitliches Beschleunigen
+const OFF_DRAG  = 5.0;         // 1/s seitliche Dämpfung
+const CAR_RADIUS = 34;         // Kollisions-Abstand (Pi mal Daumen)
+
+
+// === Trägheit ===
+const ACCEL = 2000;       // px/s²
+const DRAG  = 4.2;        // 1/s
+const BRAKE = 8.0;        // 1/s
+
+let raf=null, lastFrame=null;
+
+const players = {
+  p1: { el:lkwEl, keys:new Set(), started:false, finished:false, time:0, dist:0, s:0, lastRel:0, v:0, off: -18, offV: 0 },
+  p2: { el:carEl, keys:new Set(), started:false, finished:false, time:0, dist:0, s:0, lastRel:0, v:0, off: +18, offV: 0 }
+};
+
+let steerAngleP1 = 0;
+let steerAngleP2 = 0;
+
+let raceState = "idle"; // idle | countdown | running | finished
+let countdownEnd = 0;
+let lastCountdownText = "";
+
+const lastScore = { p1:null, p2:null };
+
+function fmt(sec){ return (typeof sec==="number" ? sec.toFixed(3)+" s" : "—"); }
+
+function showScoreboard(){
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `
+    <div style="font-family:system-ui,sans-serif;font-size:16px;">
+      <div><b>Letzte Runde</b></div>
+      <div style="margin-top:10px;">LKW: ${fmt(lastScore.p1)}</div>
+      <div>CAR: ${fmt(lastScore.p2)}</div>
+    </div>
+  `;
+  openPanel("SCOREBOARD", wrap);
+}
+
+function resetHud(){
+  raceHud.style.display = "block";
+  raceCountdownEl.style.display = "none";
+  raceScoreEl.style.display = "none";
+  timerLkwEl.textContent = "0.000 s";
+  timerCarEl.textContent = "0.000 s";
+  scoreLkwEl.textContent = "—";
+  scoreCarEl.textContent = "—";
+}
+
+function beginCountdown(now){
+  raceState = "countdown";
+  countdownEnd = now + 3000;
+  lastCountdownText = "";
+  raceCountdownEl.style.display = "block";
+  raceScoreEl.style.display = "none";
+}
+
+function beginRace(){
+  raceState = "running";
+  raceCountdownEl.style.display = "none";
+  lastFrame = null;
+
+  for (const k of ["p1","p2"]){
+    const pl = players[k];
+    pl.started=false; pl.finished=false; pl.time=0; pl.dist=0; pl.v=0;
+    pl.lastRel = relToStart(pl.s);
+  }
+}
+
+function finishIfBoth(){
+  if (players.p1.finished && players.p2.finished){
+    raceState = "finished";
+    raceScoreEl.style.display = "block";
+    scoreLkwEl.textContent = fmt(lastScore.p1);
+    scoreCarEl.textContent = fmt(lastScore.p2);
+  }
+}
+
+function closeTrack(){
+  trackOverlay.style.display = "none";
+  trackOverlay.innerHTML = "";
+  svg=null; path=null; length=0;
+  lkwEl.style.display="none";
+  carEl.style.display="none";
+  raceHud.style.display="none";
+  raceState="idle";
+  players.p1.keys.clear();
+  players.p2.keys.clear();
+}
+trackOverlay.addEventListener("click",(e)=>{ if (e.target===trackOverlay) closeTrack(); });
+
+function escapeHtml(s){
+  return String(s)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;");
+}
+
+function wrap(s,len){
+  if (len<=0) return 0;
+  s = s % len;
+  if (s<0) s += len;
+  return s;
+}
+function relToStart(s){
+  if (!length) return 0;
+  return ((s - startS) % length + length) % length;
+}
+
+function dist(a,b){
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return Math.hypot(dx, dy);
+}
+function detectClosedPath(p){
+  const a = p.getPointAtLength(0);
+  const b = p.getPointAtLength(p.getTotalLength());
+  const d = dist(a,b);
+  return { closed: d < 4, d };
+}
+
+function angleDegAtS(s){
+  const s1 = wrap(s, length);
+  const s2 = wrap(s + 3, length);
+  const p1 = path.getPointAtLength(s1);
+  const p2 = path.getPointAtLength(s2);
+  let a = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
+  if (a < 0) a += 360;
+  return a;
+}
+function angDiff(a,b){
+  let d = (a - b) % 360;
+  if (d < -180) d += 360;
+  if (d > 180) d -= 360;
+  return d;
+}
+
+function place(pl){
+  if (!svg || !path || !length) return;
+
+  const s = wrap(pl.s, length);
+  const pLocal = path.getPointAtLength(s);
+
+  // Tangente über zwei Punkte (für Normalenrichtung)
+  const s2 = wrap(s + 2.5, length);
+  const p2 = path.getPointAtLength(s2);
+
+  let tx = (p2.x - pLocal.x), ty = (p2.y - pLocal.y);
+  const tl = Math.hypot(tx, ty) || 1;
+  tx /= tl; ty /= tl;
+
+  // Normale (links vom Pfad)
+  let nx = -ty, ny = tx;
+
+  // Seitlicher Offset clampen (virtuelle Trackbreite)
+  const maxOff = Math.max(0, TRACK_HALF_WIDTH - CAR_RADIUS);
+  pl.off = Math.max(-maxOff, Math.min(maxOff, pl.off));
+
+  // Offset auf den Local-Point anwenden
+  const shifted = { x: pLocal.x + nx * pl.off, y: pLocal.y + ny * pl.off };
+
+  const ctm = path.getScreenCTM();
+  if (!ctm) return;
+
+  const pt = svg.createSVGPoint();
+  pt.x = shifted.x; pt.y = shifted.y;
+  const p = pt.matrixTransform(ctm);
+
+  pl.el.style.left = p.x + "px";
+  pl.el.style.top  = p.y + "px";
+
+  // Rotation (Auto schaut entlang Tangente)
+  const ang = Math.atan2(ty, tx) * 180 / Math.PI;
+  pl.el.style.transform = `translate(-50%,-50%) scale(0.82) rotate(${ang}deg)`;
+}
+
+
+/* Start/Ziel: tiefster Punkt */
+function findLowestPointS(pathEl, len){
+  let bestS=0, bestY=-Infinity;
+  const step = Math.max(2, len/1800);
+  for (let s=0; s<=len; s+=step){
+    const p = pathEl.getPointAtLength(s);
+    if (p.y > bestY){ bestY = p.y; bestS = s; }
+  }
+  // refine
+  const a = Math.max(0, bestS-step), b = Math.min(len, bestS+step);
+  for (let s=a; s<=b; s+=step/10){
+    const p = pathEl.getPointAtLength(s);
+    if (p.y > bestY){ bestY = p.y; bestS = s; }
+  }
+  return bestS;
+}
+
+async function openTrackById(id){
+  setBlackPreview(id);
+  closePanel();
+  closeArtefaktViewer();
+
+  trackOverlay.style.display = "block";
+  trackOverlay.innerHTML = "";
+
+  // PNG unter dem SVG
+  const bg = document.createElement("img");
+  bg.id = "trackBg";
+  bg.alt = "";
+  bg.src = `images/${id}_mousetrack.png`;
+  trackOverlay.appendChild(bg);
+
+  resetHud();
+
+  const svgPath = trackSvgPathForId(id);
+  try{
+    const res = await fetch(svgPath, { cache:"no-store" });
+    if (!res.ok) throw new Error(`Track fehlt (noch): ${svgPath}`);
+
+    const text = await res.text();
+    trackOverlay.insertAdjacentHTML("beforeend", text);
+
+    svg = trackOverlay.querySelector("svg");
+    if (!svg) throw new Error("Kein <svg> im geladenen Track gefunden");
+
+    // SVG wie PNG "contain" zentriert
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+    path = svg.querySelector("path");
+    if (!path) throw new Error("Kein <path> im Track-SVG gefunden");
+
+    length = path.getTotalLength();
+
+    const chk = detectClosedPath(path);
+    pathIsClosed = chk.closed;
+    endToStartDist = chk.d;
+
+    if (!pathIsClosed) {
+      trackOverlay.insertAdjacentHTML("beforeend", `
+        <div style="position:fixed;left:20px;top:20px;padding:10px 12px;
+                    background:rgba(0,0,0,0.65);color:#fff;font:14px/1.4 system-ui;
+                    border-radius:10px;max-width:70ch;z-index:999999;">
+          <b>Hinweis:</b> Track-Pfad ist nicht geschlossen.<br/>
+          Endpunkt-Abstand zum Start: <code>${endToStartDist.toFixed(2)}</code><br/>
+          Schließe den Pfad im SVG (z.B. mit <code>Z</code>), sonst wirkt das Wrapping wie “Umdrehen”.
+        </div>
+      `);
+    }
+
+    startS = findLowestPointS(path, length);
+
+    // Startpositionen
+    players.p1.s = wrap(startS, length);
+    players.p2.s = wrap(startS + 24, length);
+
+const TRACK_HALF_WIDTH = 5; // <<< DAS ist die Bahn-Breite
+
+players.p1.off = -TRACK_HALF_WIDTH;
+players.p2.off = +TRACK_HALF_WIDTH;
+players.p1.offV = 0;
+players.p2.offV = 0;
+players.p1.v = 0;
+players.p2.v = 0;
+
+
+
+    // Lenkwinkel initialisieren
+    steerAngleP1 = angleDegAtS(players.p1.s);
+    steerAngleP2 = angleDegAtS(players.p2.s);
+
+    // Geschwindigkeit resetten
+    players.p1.v = 0;
+    players.p2.v = 0;
+
+    lkwEl.style.display="block";
+    carEl.style.display="block";
+
+    place(players.p1);
+    place(players.p2);
+
+    raceState = "idle";
+    lastScore.p1 = null;
+    lastScore.p2 = null;
+
+    ensureLoop();
+  } catch(err){
+    console.error(err);
+    trackOverlay.innerHTML = `
+      <div style="position:fixed;left:20px;top:20px;padding:12px;
+                  background:rgba(0,0,0,0.75);color:#fff;font:14px/1.4 system-ui;
+                  border-radius:10px;max-width:70ch;">
+        <b>Track konnte nicht geladen werden.</b><br/>
+        <code>${escapeHtml(err.message)}</code>
+        <div style="margin-top:10px;opacity:.9">Klick ins Leere zum Schließen.</div>
+      </div>`;
+    svg=null; path=null; length=0;
+    lkwEl.style.display="none";
+    carEl.style.display="none";
+    raceHud.style.display="none";
+  }
+}
+
+/* =========================
+   Input
+   ========================= */
+function normKey(k){ return k.startsWith("Arrow") ? k : k.toLowerCase(); }
+
+document.addEventListener("keydown",(e)=>{
+  if (e.key==="Escape"){
+    if (panelOverlay.style.display==="block") closePanel();
+    else if (arteOverlay.style.display==="block") closeArtefaktViewer();
+    else if (trackOverlay.style.display==="block") closeTrack();
+    return;
+  }
+
+  // Artefakt navigation
+  if (arteOverlay.style.display==="block"){
+    if (e.key==="ArrowLeft"){ e.preventDefault(); arteIndex=(arteIndex+99)%N; renderArtefakt(); }
+    if (e.key==="ArrowRight"){ e.preventDefault(); arteIndex=(arteIndex+1)%N; renderArtefakt(); }
+    return;
+  }
+
+  const trackOpen = (trackOverlay.style.display==="block" && path && length);
+  if (!trackOpen) return;
+
+  const k = normKey(e.key);
+
+  // prevent scroll while racing
+  if (k.startsWith("Arrow")) e.preventDefault();
+
+  // P1
+  if (k === "ArrowUp" || k === "ArrowLeft" || k === "ArrowRight") players.p1.keys.add(k);
+
+  // P2
+  if (k === "w" || k === "a" || k === "d") players.p2.keys.add(k);
+
+  // start countdown on first input
+  if (raceState==="idle" && (players.p1.keys.size>0 || players.p2.keys.size>0)){
+    beginCountdown(performance.now());
+  }
+
+  ensureLoop();
+},{ passive:false });
+
+document.addEventListener("keyup",(e)=>{
+  const k = normKey(e.key);
+  players.p1.keys.delete(k);
+  players.p2.keys.delete(k);
+},{ passive:true });
+
+/* =========================
+   Main loop
+   ========================= */
+function ensureLoop(){
+  if (raf) return;
+  lastFrame = null;
+  raf = requestAnimationFrame(tick);
+}
+ensureLoop();
+
+function tick(t){
+  raf = requestAnimationFrame(tick);
+
+  // coords always
+  mouseX = lerp(mouseX, mouseTx, MOUSE_SMOOTH);
+  mouseY = lerp(mouseY, mouseTy, MOUSE_SMOOTH);
+  updateCoords();
+
+  // no race if no track
+  if (!svg || !path || !length) { lastFrame = t; return; }
+
+  // countdown
+  if (raceState==="countdown"){
+    const now = performance.now();
+    const msLeft = Math.max(0, countdownEnd - now);
+    const sec = Math.ceil(msLeft / 1000);
+    const txt = (sec<=0) ? "GO" : String(sec);
+
+    if (txt !== lastCountdownText){
+      lastCountdownText = txt;
+      raceCountdownEl.textContent = txt;
+    }
+
+    if (now >= countdownEnd){
+      beginRace();
+    }
+    lastFrame = t;
+    return;
+  }
+
+  if (raceState!=="running"){ lastFrame = t; return; }
+
+  if (lastFrame==null){ lastFrame=t; return; }
+  const dt = (t-lastFrame)/1000;
+  lastFrame = t;
+
+  // steering movement
+  for (const id of ["p1","p2"]){
+    const pl = players[id];
+    if (pl.finished) continue;
+
+    // ✅ robust: gasPressed existiert immer
+    let speedFactor = 0;
+    let gasPressed = false;
+
+    if (id === "p1") {
+      gasPressed = pl.keys.has("ArrowUp");
+      const left  = pl.keys.has("ArrowLeft");
+      const right = pl.keys.has("ArrowRight");
+
+      if (left)  steerAngleP1 = (steerAngleP1 - STEER_SPEED * dt + 360) % 360;
+      if (right) steerAngleP1 = (steerAngleP1 + STEER_SPEED * dt) % 360;
+
+      // Seitlich beschleunigen
+const steer = (left ? -1 : 0) + (right ? +1 : 0);
+pl.offV += steer * OFF_ACCEL * dt;
+
+// seitliche Dämpfung
+pl.offV *= Math.exp(-OFF_DRAG * dt);
+
+// Offset integrieren
+pl.off += pl.offV * dt;
+
+
+      const aTrack = angleDegAtS(pl.s);
+      const diff = Math.abs(angDiff(steerAngleP1, aTrack));
+
+      speedFactor = clamp01(1 - (diff / ALIGN_TOL));
+      speedFactor = speedFactor * speedFactor;
+
+    } else { // p2
+      gasPressed = pl.keys.has("w");
+      const left  = pl.keys.has("a");
+      const right = pl.keys.has("d");
+
+      if (left)  steerAngleP2 = (steerAngleP2 - STEER_SPEED * dt + 360) % 360;
+      if (right) steerAngleP2 = (steerAngleP2 + STEER_SPEED * dt) % 360;
+
+      const steer = (left ? -1 : 0) + (right ? +1 : 0);
+pl.offV += steer * OFF_ACCEL * dt;
+pl.offV *= Math.exp(-OFF_DRAG * dt);
+pl.off += pl.offV * dt;
+
+
+      const aTrack = angleDegAtS(pl.s);
+      const diff = Math.abs(angDiff(steerAngleP2, aTrack));
+
+      speedFactor = clamp01(1 - (diff / ALIGN_TOL));
+      speedFactor = speedFactor * speedFactor;
+    }
+
+    const wantsMove = gasPressed && speedFactor > 0.05;
+
+    // Start pro Player beim ersten echten Losfahren
+    if (wantsMove && !pl.started){
+      pl.started = true;
+      pl.time = 0;
+      pl.dist = 0;
+      pl.lastRel = relToStart(pl.s);
+      pl.v = 0;
+    }
+
+    if (pl.started && !pl.finished){
+      pl.time += dt;
+    }
+
+    // ✅ Trägheit läuft auch beim Ausrollen weiter (wenn gestartet)
+    if (pl.started && !pl.finished){
+      const targetV = SPEED * speedFactor;
+
+      if (gasPressed) {
+        pl.v += (targetV - pl.v) * clamp01(ACCEL * dt / Math.max(1, SPEED));
+      } else {
+        pl.v *= Math.exp(-DRAG * dt);
+      }
+
+      if (speedFactor < 0.15) {
+        pl.v *= Math.exp(-BRAKE * dt);
+      }
+
+      const ds = pl.v * dt;
+
+      if (ds > 0.001) {
+        pl.s = pathIsClosed ? wrap(pl.s + ds, length) : Math.min(pl.s + ds, length);
+        pl.dist += ds;
+        place(pl);
+
+        const rel = relToStart(pl.s);
+        const crossedStart = (rel < pl.lastRel);
+        pl.lastRel = rel;
+
+        if (!pl.finished && pl.dist >= length*0.90 && crossedStart){
+          pl.finished = true;
+          lastScore[id] = pl.time;
+          if (id==="p1") scoreLkwEl.textContent = fmt(pl.time);
+          if (id==="p2") scoreCarEl.textContent = fmt(pl.time);
+          finishIfBoth();
+        }
+      }
+    }
+  }
+
+  timerLkwEl.textContent = fmt(players.p1.time);
+  timerCarEl.textContent = fmt(players.p2.time);
+}
+
+// ===== BlackBox Preview (letzter Track) =====
+const blackPreviewEl = document.getElementById("blackPreview");
+
+function setBlackPreview(id){
+  if (!blackPreviewEl) return;
+  blackPreviewEl.src = `images/${id}_mousetrack.png`;
+}
+
+// Beim ersten Laden: A1 anzeigen
+window.addEventListener("load", () => {
+  setBlackPreview("A1");
+});
+
+</script>
+</body>
+</html>

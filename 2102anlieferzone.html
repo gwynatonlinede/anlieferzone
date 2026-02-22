@@ -1,0 +1,2409 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>anlieferzone</title>
+
+<style>
+  @font-face{
+    font-family:"g1";
+    src:url("fonts/g1.ttf") format("truetype");
+    font-weight:100 900;
+    font-style:normal;
+    font-display:swap;
+  }
+
+  :root{
+    --green:#00ff00;
+    --ui-z:2147483647;
+
+    /* ✅ Typewriter dynamic size (JS setzt das) */
+    --typeSize: 20px;
+  }
+
+  body{ margin:0; background:var(--green); transition:background 1200ms ease; }
+
+  /* ===== GRID ===== */
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(10, 1fr);
+    position:relative;
+    z-index:1;
+    transition: transform 1.6s ease, filter 1.6s ease, opacity 1.6s ease;
+    will-change: transform;
+  }
+  .cell{ position:relative; z-index:0; overflow:visible; }
+  .cell.isHoverTop{ z-index:9999; }
+  .cell img{ width:100%; height:auto; display:block; }
+
+  /* ===== HOVER ===== */
+  .hover{
+    position:absolute;
+    top:0; left:0;
+    display:none;
+    z-index:50; /* ✅ immer über den Zellen */
+  }
+  .hover img{
+    width:150px;
+    cursor:pointer;
+    display:block;
+  }
+
+  /* ===== TRACK OVERLAY ===== */
+  #trackOverlay{
+    position:fixed;
+    inset:0;
+    display:none;
+    z-index:2600;
+    background:rgba(0,0,0,0); /* transparent aber klickbar */
+  }
+
+  #trackBg{
+    position:absolute;
+    inset:0;
+    width:100vw;
+    height:100vh;
+    object-fit:contain;
+    z-index:0;
+    pointer-events:none;
+    display:block;
+  }
+
+  #trackOverlay svg{
+    position:absolute;
+    inset:0;
+    width:100vw;
+    height:100vh;
+    display:block;
+    z-index:1;
+  }
+
+  #trackOverlay svg,
+  #trackBg{
+    transform-origin:center center;
+  }
+
+  /* ===== HUD ===== */
+  #raceHud{
+    position:fixed;
+    top:16px;
+    left:50%;
+    transform:translateX(-50%);
+    z-index:var(--ui-z);
+    font-family:"g1", sans-serif;
+    color:var(--green);
+    text-shadow:0 6px 18px rgba(0,0,0,0.35);
+    user-select:none;
+    pointer-events:none;
+    text-transform:uppercase;
+    letter-spacing:0.02em;
+    display:none;
+    text-align:center;
+  }
+  #raceCountdown{ font-size:96px; line-height:0.95; margin-bottom:10px; display:none; }
+  #raceTimers{ font-size:44px; line-height:1.05; }
+  #raceTimers .tRow{ margin:6px 0; }
+  #raceScore{ margin-top:12px; font-size:34px; line-height:1.05; display:none; }
+
+  /* ===== PLAYERS ===== */
+  .player{
+    position:fixed;
+    z-index:2147483646;
+    display:none;
+    pointer-events:none;
+    user-select:none;
+    transform:translate(-50%,-50%) scale(0.82);
+    transform-origin:center center;
+  }
+  #lkw{ width:90px; }
+  #car{ width:70px; }
+
+  /* ===== COORDS ===== */
+  #coords{
+    position:fixed;
+    left:18px;
+    bottom:18px;
+    z-index:var(--ui-z);
+    color:#000;
+    font-family:"g1", sans-serif;
+    font-size:22px;
+    line-height:1.1;
+    user-select:none;
+    pointer-events:none;
+    white-space:pre;
+  }
+
+  /* ===== BOTTOM AREA ===== */
+  #bottomArea{
+    position:relative;
+    width:100%;
+    min-height:320px;
+    background:var(--green);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:40px 24px 70px;
+    box-sizing:border-box;
+  }
+  #bottomButtons{
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    align-items:center;
+    justify-content:center;
+  }
+  .bigBtn{
+    border:none;
+    background:transparent;
+    color:#000;
+    font-family:"g1", sans-serif;
+    font-size:64px;
+    line-height:0.95;
+    cursor:pointer;
+    padding:0;
+    text-transform:uppercase;
+  }
+  .bigBtn:active{ transform:translateY(1px); }
+
+  #blackBox{
+    position:absolute;
+    right:70px;
+    bottom:0;
+    width:260px;
+    height:150px;
+    background:#000;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  #blackPreview{
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    display:block;
+    pointer-events:none;
+    user-select:none;
+  }
+
+  /* ===== PANEL ===== */
+  #panelOverlay{
+    position:fixed;
+    inset:0;
+    display:none;
+    z-index:2000;
+    background:rgba(0,0,0,0.25);
+  }
+  #panel{
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    width:min(1100px, 92vw);
+    height:min(720px, 86vh);
+    background:rgba(255,255,255,0.92);
+    border-radius:14px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.35);
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+  #panelHeader{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:14px 16px;
+    border-bottom:1px solid rgba(0,0,0,0.12);
+  }
+  #panelTitle{
+    font-family:"g1", sans-serif;
+    font-size:28px;
+    color:#000;
+    margin:0;
+    text-transform:uppercase;
+  }
+  #panelClose{
+    border:none;
+    background:transparent;
+    font-family:"g1", sans-serif;
+    font-size:24px;
+    cursor:pointer;
+    color:#000;
+  }
+  #panelBody{
+    padding:16px;
+    overflow:auto;
+    flex:1;
+    color:#000;
+    font-family:system-ui, sans-serif;
+  }
+
+  /* ===== TRACKS GRID ===== */
+  .trackList{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+    gap:18px;
+    align-items:start;
+  }
+  .trackItem{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    padding:10px 8px;
+    border:1px solid rgba(0,0,0,0.12);
+    border-radius:12px;
+    background:rgba(255,255,255,0.7);
+    cursor:pointer;
+    user-select:none;
+  }
+  .trackSvg{ width:100%; height:auto; display:block; }
+  .trackName{
+    font-family:"g1", sans-serif;
+    font-size:28px;
+    line-height:1;
+    color:#000;
+    text-transform:uppercase;
+  }
+
+  /* ===== ARTEFAKT VIEWER ===== */
+  #arteOverlay{
+    position:fixed;
+    inset:0;
+    display:none;
+    z-index:2500;
+    background:#fff;
+  }
+  #arteStage{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:visible;
+    perspective:1200px;
+  }
+  #arteImg{
+    max-width:min(78vw, 980px);
+    max-height:72vh;
+    width:auto;
+    height:auto;
+    display:block;
+    user-select:none;
+    pointer-events:none;
+    position:relative;
+    z-index:2;
+  }
+  .arteSide{
+    position:absolute;
+    top:50%;
+    transform:translateY(-50%);
+    width:min(46vw, 560px);
+    max-height:60vh;
+    height:auto;
+    opacity:0.55;
+    pointer-events:none;
+    user-select:none;
+    z-index:1;
+    filter:drop-shadow(0 18px 36px rgba(0,0,0,0.18));
+  }
+  #arteImgPrev{ left:-14vw; transform:translateY(-50%) scale(0.72) rotateY(22deg); }
+  #arteImgNext{ right:-14vw; transform:translateY(-50%) scale(0.72) rotateY(-22deg); }
+
+  #arteLabel{
+    position:absolute;
+    left:50%;
+    top:56%;
+    transform:translate(-50%, 0);
+    font-family:"g1", sans-serif;
+    font-size:84px;
+    color:var(--green);
+    text-transform:uppercase;
+    letter-spacing:0.02em;
+    pointer-events:none;
+    user-select:none;
+    text-shadow:0 6px 18px rgba(0,0,0,0.25);
+    z-index:3;
+  }
+  .arteArrow{
+    position:absolute;
+    top:26%;
+    width:92px;
+    height:92px;
+    border:none;
+    background:transparent;
+    cursor:pointer;
+    user-select:none;
+    z-index:4;
+  }
+  .arteArrow::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    margin:auto;
+    width:0;
+    height:0;
+    border-top:22px solid transparent;
+    border-bottom:22px solid transparent;
+    filter:drop-shadow(0 6px 14px rgba(0,0,0,0.25));
+  }
+  #artePrev{ left:70px; }
+  #artePrev::before{ border-right:40px solid var(--green); left:26px; }
+  #arteNext{ right:70px; }
+  #arteNext::before{ border-left:40px solid var(--green); right:26px; }
+
+  #arteClose{
+    position:absolute;
+    right:22px;
+    top:16px;
+    border:none;
+    background:transparent;
+    font-family:"g1", sans-serif;
+    font-size:28px;
+    cursor:pointer;
+    color:#000;
+    z-index:5;
+  }
+
+  /* ===== WEATHER CANVAS ===== */
+  #weatherCanvas{
+    position:fixed;
+    inset:0;
+    width:100vw;
+    height:100vh;
+    z-index:1500;
+    pointer-events:none;
+    display:block;
+    opacity:1;
+  }
+
+  /* ===== TYPEWRITER ===== */
+  .typeLine{
+  white-space: pre-wrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  hyphens: none;
+  line-height: 1.05;
+}
+
+  #typeOverlay{
+    position:fixed;
+    inset:0;
+    display:none;
+    z-index:9999999;
+    pointer-events:none;
+    padding:24px;
+    box-sizing:border-box;
+  }
+
+  #typeText{
+    font-family:"g1", sans-serif;
+    color:var(--green);
+    font-weight:800;
+    font-size: var(--typeSize, 50px);
+    line-height:1.05;
+    letter-spacing:0.01em;
+    text-transform:none;
+    text-align:left;
+  }
+
+  #typeGrid{
+    display:grid;
+    grid-template-columns:repeat(1, 1fr); /* aktuell 1 Spalte */
+    gap:28px;
+    align-items:start;
+    width:100%;
+  }
+
+  .typeCol{ min-height:1px; }
+
+  .colContent{
+    white-space: pre-wrap;
+    word-break: keep-all;     /* ✅ nicht in Wörter brechen */
+    overflow-wrap: normal;    /* ✅ keine Wort-Zerstückelung */
+    hyphens: none;
+  }
+
+  /* Cursor Element (wird im JS positioniert neben Text) */
+  #typeCursor{
+    display:none;
+    margin-left:6px;
+    width:0.65ch;
+    animation:typeBlink 0.9s steps(1) infinite;
+    color:var(--green);
+  }
+
+  @keyframes typeBlink{
+    0%,49%{opacity:1;}
+    50%,100%{opacity:0;}
+  }
+
+  /* Idle soll NICHT den Hintergrund ändern */
+  body.idle{ /* leer */ }
+
+  /* Hintergrund wird nur grau, wenn wirklich geschrieben wird */
+  body.reading{
+    background:#7e7e7e;
+  }
+
+  /* ===== when typewriter is actually writing ===== */
+body.reading{
+  background:#8f8f8f;
+}
+
+/* optional: global grid drift look while reading (nice even without per-cell drift) */
+body.reading .grid{
+  filter: blur(0.2px);
+  opacity: 0.92;
+}
+
+/* ===== RACE: AMPEL + FINISH ===== */
+#trafficLight{
+  display:none;
+  margin: 10px auto 0;
+  width: 180px;
+  height: auto;
+  filter: drop-shadow(0 10px 20px rgba(0,0,0,0.25));
+}
+
+.finishIcon{
+  display:none;
+  width: 64px;
+  height: auto;
+  vertical-align: middle;
+  margin-left: 10px;
+  transform: translateY(-2px);
+  filter: drop-shadow(0 10px 20px rgba(0,0,0,0.25));
+}
+
+
+</style>
+</head>
+
+<body>
+  <div class="grid" id="grid"></div>
+
+  <!-- Typewriter overlay -->
+  <div id="typeOverlay" aria-hidden="true">
+    <div id="typeText">
+      <div id="typeGrid">
+        <div class="typeCol"><span class="colContent" id="col0"></span><span id="typeCursor">|</span></div>
+        <!-- Du kannst col1-3 später wieder aktivieren, aktuell werden sie nicht benutzt -->
+        <div class="typeCol" style="display:none;"><span class="colContent" id="col1"></span></div>
+        <div class="typeCol" style="display:none;"><span class="colContent" id="col2"></span></div>
+        <div class="typeCol" style="display:none;"><span class="colContent" id="col3"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="weatherCanvas" aria-hidden="true"></canvas>
+  <div id="trackOverlay"></div>
+
+<div id="raceHud" aria-hidden="true">
+  <div id="raceCountdown">3</div>
+
+  <!-- ✅ Ampel -->
+  <img id="trafficLight" alt="" />
+
+  <div id="raceTimers">
+    <div class="tRow">
+      LKW: <span id="timerLkw">0.000 s</span>
+      <img id="finishLkw" class="finishIcon" src="images/finish1.png" alt="" />
+    </div>
+    <div class="tRow">
+      CAR: <span id="timerCar">0.000 s</span>
+      <img id="finishCar" class="finishIcon" src="images/finish1.png" alt="" />
+    </div>
+  </div>
+
+  <div id="raceScore">
+    Score: LKW: <span id="scoreLkw">—</span> &nbsp;&nbsp; CAR: <span id="scoreCar">—</span>
+  </div>
+</div>
+
+
+  <img id="lkw" class="player" src="images/LKW.png" alt="LKW" />
+  <img id="car" class="player" src="images/car.png" alt="car" />
+
+  <div id="coords"></div>
+
+  <section id="bottomArea">
+    <div id="bottomButtons">
+      <button class="bigBtn" id="btnScore">SCOREBOARD</button>
+      <button class="bigBtn" id="btnTracks">TRACKS</button>
+      <button class="bigBtn" id="btnArtef">ARTEFAKTS</button>
+    </div>
+    <div id="blackBox" aria-hidden="true">
+      <img id="blackPreview" alt="" />
+    </div>
+  </section>
+
+  <!-- Panel -->
+  <div id="panelOverlay">
+    <div id="panel" role="dialog" aria-modal="true">
+      <div id="panelHeader">
+        <h2 id="panelTitle">PANEL</h2>
+        <button id="panelClose">X</button>
+      </div>
+      <div id="panelBody"></div>
+    </div>
+  </div>
+
+  <!-- Artefakte -->
+  <div id="arteOverlay" aria-hidden="true">
+    <button id="arteClose">X</button>
+    <div id="arteStage">
+      <button class="arteArrow" id="artePrev" aria-label="Vorheriges Artefakt"></button>
+
+      <img id="arteImgPrev" class="arteSide" alt="" aria-hidden="true" />
+      <img id="arteImg" alt="Artefakt" />
+      <img id="arteImgNext" class="arteSide" alt="" aria-hidden="true" />
+
+      <div id="arteLabel"></div>
+
+      <button class="arteArrow" id="arteNext" aria-label="Naechstes Artefakt"></button>
+    </div>
+  </div>
+
+<script>
+/* =========================
+   TUNING
+   ========================= */
+const TUNE = {
+  driftRange: 2000,
+  driftRotate: 2.2,
+  driftDuration: 40200,
+  driftReset: 2000,
+
+  startAfterIdleMs: 20000,
+
+  // Click stack loudness
+  clickMaxVoices: 8,
+  clickBaseVol: 0.55,
+  clickGainStep: 0.35,
+  clickGainMax: 4.0,
+};
+
+/* =========================
+   Helpers
+   ========================= */
+function rand(a,b){ return a + Math.random()*(b-a); }
+function pick(arr){ return arr[(Math.random()*arr.length)|0]; }
+
+/* =========================
+   MASTER AMBIENT 172.wav
+   ========================= */
+const masterAmbient = (() => {
+  let unlocked = false;
+  const a = new Audio("audio/172.wav");
+  a.loop = true;
+  a.preload = "auto";
+  a.volume = 1.0;
+
+  async function tryPlay(){
+    if (!unlocked) return;
+    try { await a.play(); } catch {}
+  }
+
+  function unlockAndPlay(){
+    if (!unlocked) unlocked = true;
+    tryPlay();
+  }
+
+  function stop(){
+    try { a.pause(); a.currentTime = 0; } catch {}
+  }
+
+  window.addEventListener("pointerdown", unlockAndPlay, { passive:true });
+  return { tryPlay, stop };
+})();
+
+/* =========================
+   AUDIO MANAGER
+   ========================= */
+const VEHICLE_SOUNDS = [
+  "audio/motor1.wav",
+  "audio/motorrad1.wav",
+  "audio/lkw1.wav",
+  "audio/lkw2.wav",
+  "audio/lkw3.wav",
+  "audio/lkw4.wav",
+  "audio/lkw5.wav",
+  "audio/lkw6.wav",
+  "audio/fridge1.wav",
+  "audio/crow1.wav",
+  "audio/wash1.wav",
+  "audio/wash3.wav",
+  "audio/wash4.wav",
+  "audio/circles.wav",
+  "audio/klang1.wav",
+];
+
+let vehicleStack = [];
+let weatherAudio = null;
+
+function playLoop(src, volume=1.0){
+  const a = new Audio(src);
+  a.loop = true;
+  a.preload = "auto";
+  a.volume = volume;
+  a.play().catch(()=>{});
+  return a;
+}
+function playRandomVehicleSound(){
+  const src = pick(VEHICLE_SOUNDS);
+  const a = playLoop(src, 0.55);
+  vehicleStack.push(a);
+}
+function stopAllVehicleSounds(){
+  for (const a of vehicleStack){
+    try { a.pause(); a.currentTime = 0; } catch {}
+  }
+  vehicleStack.length = 0;
+}
+function playWeather(src){
+  stopWeather();
+  if (!src) return;
+  weatherAudio = playLoop(src, 0.8);
+}
+function stopWeather(){
+  if (!weatherAudio) return;
+  try { weatherAudio.pause(); weatherAudio.currentTime = 0; } catch {}
+  weatherAudio = null;
+}
+
+/* =========================
+   CLICK STACK (stack + louder when full)
+   ========================= */
+const CLICK_SOUNDS = [
+  // Beispiel:
+  // "audio/click1.wav",
+  // "audio/click2.wav",
+];
+
+let clickStack = []; // [{a:Audio, base:number}]
+let clickGainMult = 1.0;
+
+function applyClickGain(){
+  for (const v of clickStack){
+    v.a.volume = Math.min(1.0, v.base * clickGainMult);
+  }
+}
+function cleanupClickStack(){
+  clickStack = clickStack.filter(v => !v.a.ended);
+}
+function playClickSoundOneShot(src){
+  const a = new Audio(src);
+  a.preload = "auto";
+  a.loop = false;
+  a.volume = Math.min(1.0, TUNE.clickBaseVol * clickGainMult);
+  a.play().catch(()=>{});
+
+  a.addEventListener("ended", () => {
+    clickStack = clickStack.filter(v => v.a !== a);
+  });
+
+  clickStack.push({ a, base: TUNE.clickBaseVol });
+}
+function onAnyClickStackSound(){
+  if (!CLICK_SOUNDS.length) return;
+
+  cleanupClickStack();
+
+  if (clickStack.length < TUNE.clickMaxVoices){
+    playClickSoundOneShot(pick(CLICK_SOUNDS));
+    return;
+  }
+
+  clickGainMult = Math.min(TUNE.clickGainMax, clickGainMult + TUNE.clickGainStep);
+  applyClickGain();
+}
+function stopAllClickSounds(){
+  for (const v of clickStack){
+    try { v.a.pause(); v.a.currentTime = 0; } catch {}
+  }
+  clickStack.length = 0;
+  clickGainMult = 1.0;
+}
+
+window.addEventListener("pointerdown", () => {
+  onAnyClickStackSound();
+}, { passive:true });
+
+/* =========================
+   IDLE MODE (5s ohne Input) + Events
+   ========================= */
+(() => {
+  const IDLE_MS = 5000;
+  let idleTimer = null;
+  let isIdle = false;
+
+  function setIdle(on){
+    if (isIdle === on) return;
+    isIdle = on;
+    document.body.classList.toggle("idle", on);
+    window.dispatchEvent(new CustomEvent("idlechange", { detail:{ idle:on } }));
+    if (on) window.dispatchEvent(new Event("idleenter"));
+    else window.dispatchEvent(new Event("idleleave"));
+  }
+
+  function bump(){
+    setIdle(false);
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => setIdle(true), IDLE_MS);
+  }
+
+  ["pointerdown","pointermove","mousemove","keydown","wheel","touchstart"].forEach(ev=>{
+    window.addEventListener(ev, bump, { passive:true });
+  });
+
+  bump();
+})();
+
+/* =========================
+   TYPEWRITER (1 column, shrinking only when full)
+   - writes into #col0
+   - starts after idleenter + DELAY
+   - dispatches "typewriterstart" so your drift listeners run
+   ========================= */
+(() => {
+  const overlay = document.getElementById("typeOverlay");
+  const col0 = document.getElementById("col0");
+  let currentLineEl = null;
+let currentLineText = "";
+  if (!overlay || !col0) return;
+
+  // ---- Settings ----
+  const IDLE_DELAY_MS = 20000;  // startet 20s NACH idleenter
+  const BASE_SIZE = 20;         // Startgröße (deine normale Größe)
+  const MIN_SIZE  = 12;         // niemals kleiner
+  const SHRINK_STEP = 0.35;     // wie stark pro "Zeile zu viel" schrumpfen
+
+  // ✅ Variierende Schriftgrößen
+const LINE_MIN = 14;   // kleinste mögliche Zeile
+const LINE_MAX = 160;  // größte mögliche Zeile
+
+
+  // Tippgeschwindigkeit
+  const TYPE_MIN = 18;
+  const TYPE_MAX = 60;
+
+  const TEXT_FILES = [
+  "text/anlieferzone1.txt",
+  "text/anlieferzone2.txt",
+  "text/anlieferzone3.txt",
+  "text/anlieferzone4.txt",
+  "text/anlieferzone5.txt",
+];
+
+let lastTextIndex = -1;
+
+let fullText = "";
+let i = 0;
+let timer = null;
+let idleDelayTimer = null;
+
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+
+  function charDelay(ch){
+    if (ch === ".") return rand(260,520);
+    if (ch === ",") return rand(140,260);
+    if (ch === "\n") return rand(280,620);
+    if (ch === " ") return rand(20,45);
+    return rand(TYPE_MIN, TYPE_MAX);
+  }
+
+  function normalizeTypingText(txt){
+    txt = String(txt || "");
+    txt = txt.replace(/[\u00A0\u202F]/g, " ");
+    txt = txt.replace(/[\u200B-\u200D\uFEFF]/g, "");
+    txt = txt.replace(/\r\n?/g, "\n");
+    txt = txt.replace(/\n{2,}/g, "\n\n");
+    txt = txt.replace(/([^\n])\n([^\n])/g, "$1 $2");
+    txt = txt.replace(/[ \t]{2,}/g, " ");
+    return txt.trim();
+  }
+
+  function pickNextTextFile(){
+  if (!TEXT_FILES.length) return null;
+
+  // nicht zweimal hintereinander derselbe Text (solange >1 Datei)
+  let idx = (Math.random() * TEXT_FILES.length) | 0;
+  if (TEXT_FILES.length > 1){
+    while (idx === lastTextIndex){
+      idx = (Math.random() * TEXT_FILES.length) | 0;
+    }
+  }
+  lastTextIndex = idx;
+  return TEXT_FILES[idx];
+}
+
+async function loadText(){
+  const file = pickNextTextFile();
+  if (!file) throw new Error("Keine TEXT_FILES definiert.");
+
+  const res = await fetch(file, { cache:"no-store" });
+  if (!res.ok) throw new Error("Text nicht gefunden: " + file);
+  return normalizeTypingText(await res.text());
+}
+
+
+  // misst, ob der Text in der Overlay-Höhe überläuft
+  function updateShrink(){
+    const maxH = window.innerHeight - 48; // padding grob (24 top + 24 bottom)
+    const usedH = overlay.getBoundingClientRect().height;
+
+    // solange nicht voll: Basisgröße
+    if (usedH <= maxH) {
+      document.documentElement.style.setProperty("--typeSize", BASE_SIZE + "px");
+      return;
+    }
+
+    // wenn voll: stufenweise kleiner, aber nur nach unten
+    const overflowPx = usedH - maxH;
+    const extraLinesApprox = overflowPx / (BASE_SIZE * 1.05);
+    const target = Math.max(MIN_SIZE, BASE_SIZE - extraLinesApprox * (SHRINK_STEP * 10));
+
+    // nur kleiner werden lassen (niemals wieder größer, solange typing läuft)
+    const current = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--typeSize")) || BASE_SIZE;
+    const next = Math.min(current, target);
+
+    document.documentElement.style.setProperty("--typeSize", next.toFixed(2) + "px");
+  }
+
+  function show(){
+    overlay.style.display = "block";
+  }
+
+  function hide(){
+    overlay.style.display = "none";
+  }
+
+  function startTyping(){
+  if (!fullText) return;
+
+  i = 0;
+  col0.innerHTML = "";
+  document.documentElement.style.setProperty("--typeSize", BASE_SIZE + "px");
+
+  show();
+  document.body.classList.add("reading");
+  window.dispatchEvent(new Event("typewriterstart"));
+
+  currentLineEl = null;
+  currentLineText = "";
+
+  function createNewLine(){
+    currentLineEl = document.createElement("div");
+    currentLineEl.className = "typeLine";
+
+    // ✅ zufällige Größe pro Zeile
+    const size = rand(LINE_MIN, LINE_MAX);
+    currentLineEl.style.fontSize = size + "px";
+
+    col0.appendChild(currentLineEl);
+    currentLineText = "";
+  }
+
+  const step = () => {
+    const ch = fullText[i++];
+
+    if (!currentLineEl) createNewLine();
+
+    if (ch === "\n"){
+      createNewLine();
+    } else {
+      currentLineText += ch;
+      currentLineEl.textContent = currentLineText;
+    }
+
+    updateShrink();
+
+    if (i >= fullText.length){
+      clearTimeout(timer);
+      timer = null;
+      return;
+    }
+
+    timer = setTimeout(step, charDelay(ch));
+  };
+
+  clearTimeout(timer);
+  timer = setTimeout(step, rand(120, 240));
+}
+
+
+  function stopTyping(){
+    if (idleDelayTimer){ clearTimeout(idleDelayTimer); idleDelayTimer = null; }
+    if (timer){ clearTimeout(timer); timer = null; }
+
+    document.body.classList.remove("reading");
+    window.dispatchEvent(new Event("typewriterstop"));
+    col0.textContent = "";
+    document.documentElement.style.setProperty("--typeSize", BASE_SIZE + "px");
+    hide();
+  }
+
+  function scheduleStartAfterIdle(){
+    if (idleDelayTimer) clearTimeout(idleDelayTimer);
+    idleDelayTimer = setTimeout(async () => {
+      try{
+        fullText = await loadText();   // ✅ jedes Mal neuen random Text holen
+startTyping();
+
+      }catch(err){
+        console.warn(err);
+      }
+    }, IDLE_DELAY_MS);
+  }
+
+  // hooks from your idle system:
+  window.addEventListener("idleenter", scheduleStartAfterIdle);
+  window.addEventListener("idleleave", stopTyping);
+
+  // resize: nur Shrink neu prüfen (größer wird es während typing nicht)
+  window.addEventListener("resize", () => {
+    if (overlay.style.display === "block") updateShrink();
+  }, { passive:true });
+
+})();
+
+
+
+/* =========================
+   Helpers: IDs A1..J10
+   ========================= */
+const letters = "ABCDEFGHIJ".split("");
+const N = 100;
+
+function idFromIndex(i){
+  const r = Math.floor(i / 10) + 1;
+  const c = i % 10;
+  return letters[c] + r;
+}
+function indexFromId(id){
+  const c = letters.indexOf(id[0]);
+  const r = parseInt(id.slice(1), 10);
+  if (c < 0 || !(r >= 1 && r <= 10)) return 0;
+  return (r - 1) * 10 + c;
+}
+
+/* =========================
+   Coords
+   ========================= */
+const coordsEl = document.getElementById("coords");
+const TL = { lat: 52.39681586505347, lon: 13.047019466511426 };
+const TR = { lat: 52.39669486607658, lon: 13.047427521379081 };
+const BL = { lat: 52.39649282317423, lon: 13.04686925114396  };
+const BR = { lat: 52.39640547927263, lon: 13.04731578189957  };
+const COORD_DECIMALS = 13;
+const MOUSE_SMOOTH = 0.16;
+let mouseTx=0.5, mouseTy=0.5, mouseX=0.5, mouseY=0.5;
+
+function clamp01(v){ return Math.max(0, Math.min(1, v)); }
+function lerp(a,b,t){ return a + (b-a)*t; }
+function bilerp(tl,tr,bl,br,x,y){
+  const top = lerp(tl, tr, x);
+  const bot = lerp(bl, br, x);
+  return lerp(top, bot, y);
+}
+function updateCoords(){
+  const lat = bilerp(TL.lat, TR.lat, BL.lat, BR.lat, mouseX, mouseY);
+  const lon = bilerp(TL.lon, TR.lon, BL.lon, BR.lon, mouseX, mouseY);
+  coordsEl.textContent = lat.toFixed(COORD_DECIMALS) + "," + lon.toFixed(COORD_DECIMALS);
+}
+window.addEventListener("mousemove", (e) => {
+  const w = Math.max(1, innerWidth), h = Math.max(1, innerHeight);
+  mouseTx = clamp01(e.clientX / w);
+  mouseTy = clamp01(e.clientY / h);
+});
+
+/* =========================
+   GRID DRIFT (✅ 1x global)
+   ========================= */
+(() => {
+  const gridEl = document.getElementById("grid");
+  if (!gridEl) return;
+
+  function applyDrift(){
+    const cells = Array.from(gridEl.querySelectorAll(".cell"));
+    for (const cell of cells){
+      const x = rand(-TUNE.driftRange, TUNE.driftRange);
+      const y = rand(-TUNE.driftRange, TUNE.driftRange);
+      const r = rand(-TUNE.driftRotate, TUNE.driftRotate);
+
+      cell.style.transition = `transform ${TUNE.driftDuration}ms ease`;
+      cell.style.transform  = `translate(${x}px, ${y}px) rotate(${r}deg)`;
+    }
+  }
+
+  function resetDrift(){
+    const cells = Array.from(gridEl.querySelectorAll(".cell"));
+    for (const cell of cells){
+      cell.style.transition = `transform ${TUNE.driftReset}ms ease`;
+      cell.style.transform  = `translate(0px, 0px) rotate(0deg)`;
+    }
+  }
+
+  window.addEventListener("typewriterstart", applyDrift);
+  window.addEventListener("typewriterstop", resetDrift);
+  window.addEventListener("idleleave", resetDrift);
+})();
+
+/* =========================
+   Grid + hover (click opens track)
+   ========================= */
+const grid = document.getElementById("grid");
+
+for (let i=0; i<N; i++){
+  const id = idFromIndex(i);
+
+  const cell = document.createElement("div");
+  cell.className = "cell";
+
+  const img = document.createElement("img");
+  img.src = `images/${id}.png`;
+  img.alt = id;
+
+  const hover = document.createElement("div");
+  hover.className = "hover";
+
+  const hi = document.createElement("img");
+  hi.src = `images/${id}_hover.png`;
+  hi.alt = id + " hover";
+
+  hover.appendChild(hi);
+  cell.append(img, hover);
+  grid.appendChild(cell);
+
+  let hideTimer = null;
+
+  const showHover = () => {
+    if (hideTimer) clearTimeout(hideTimer);
+    cell.classList.add("isHoverTop");
+    hover.style.display = "block";
+  };
+
+  const hideHover = () => {
+    if (hideTimer) clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      hover.style.display = "none";
+      cell.classList.remove("isHoverTop");
+    }, 220);
+  };
+
+  cell.addEventListener("mouseenter", showHover);
+  cell.addEventListener("mouseleave", hideHover);
+  hover.addEventListener("mouseenter", showHover);
+  hover.addEventListener("mouseleave", hideHover);
+
+  hi.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    openTrackById(id);
+  });
+}
+
+/* =========================
+   Panel (Tracks / Scoreboard)
+   ========================= */
+const panelOverlay = document.getElementById("panelOverlay");
+const panelTitle = document.getElementById("panelTitle");
+const panelBody = document.getElementById("panelBody");
+document.getElementById("panelClose").addEventListener("click", closePanel);
+panelOverlay.addEventListener("click", (e)=>{ if (e.target===panelOverlay) closePanel(); });
+
+function openPanel(title, node){
+  panelTitle.textContent = title;
+  panelBody.innerHTML = "";
+  panelBody.appendChild(node);
+  panelOverlay.style.display = "block";
+}
+function closePanel(){
+  panelOverlay.style.display = "none";
+  panelBody.innerHTML = "";
+}
+
+document.getElementById("btnTracks").addEventListener("click", showTracks);
+document.getElementById("btnScore").addEventListener("click", showScoreboard);
+document.getElementById("btnArtef").addEventListener("click", ()=>openArtefaktViewer(0));
+
+function trackSvgPathForId(id){ return `images/${id}_mousetrack.svg`; }
+
+function showTracks(){
+  const wrap = document.createElement("div");
+  wrap.className = "trackList";
+
+  for (let i=0;i<N;i++){
+    const id = idFromIndex(i);
+
+    const item = document.createElement("div");
+    item.className = "trackItem";
+    item.addEventListener("click", ()=>{
+      closePanel();
+      openTrackById(id);
+    });
+
+    const img = document.createElement("img");
+    img.className = "trackSvg";
+    img.src = `images/${id}_mousetrack.png`;
+    img.alt = id;
+    img.loading = "lazy";
+
+    const name = document.createElement("div");
+    name.className = "trackName";
+    name.textContent = id;
+
+    item.append(img, name);
+    wrap.appendChild(item);
+  }
+
+  openPanel("TRACKS", wrap);
+}
+
+/* =========================
+   Artefakt viewer
+   ========================= */
+const arteOverlay = document.getElementById("arteOverlay");
+const arteImg = document.getElementById("arteImg");
+const arteImgPrev = document.getElementById("arteImgPrev");
+const arteImgNext = document.getElementById("arteImgNext");
+const arteLabel = document.getElementById("arteLabel");
+const artePrev = document.getElementById("artePrev");
+const arteNext = document.getElementById("arteNext");
+document.getElementById("arteClose").addEventListener("click", closeArtefaktViewer);
+
+let arteIndex = 0;
+function artePathForId(id){ return `images/${id}_hover.png`; }
+
+function renderArtefakt(){
+  const id = idFromIndex(arteIndex);
+  const prevId = idFromIndex((arteIndex + 99) % N);
+  const nextId = idFromIndex((arteIndex + 1) % N);
+
+  arteImg.src = artePathForId(id);
+  arteImgPrev.src = artePathForId(prevId);
+  arteImgNext.src = artePathForId(nextId);
+  arteLabel.textContent = id;
+}
+function openArtefaktViewer(startIndex){
+  arteIndex = ((startIndex % N) + N) % N;
+  renderArtefakt();
+  arteOverlay.style.display = "block";
+}
+function closeArtefaktViewer(){ arteOverlay.style.display = "none"; }
+
+artePrev.addEventListener("click",(e)=>{ e.preventDefault(); arteIndex=(arteIndex+99)%N; renderArtefakt(); });
+arteNext.addEventListener("click",(e)=>{ e.preventDefault(); arteIndex=(arteIndex+1)%N; renderArtefakt(); });
+
+/* =========================
+   Track + Race (dein Code – unverändert außer kleinen Fixes)
+   ========================= */
+const trackOverlay = document.getElementById("trackOverlay");
+const lkwEl = document.getElementById("lkw");
+const carEl = document.getElementById("car");
+
+const raceHud = document.getElementById("raceHud");
+const raceCountdownEl = document.getElementById("raceCountdown");
+const timerLkwEl = document.getElementById("timerLkw");
+const timerCarEl = document.getElementById("timerCar");
+const raceScoreEl = document.getElementById("raceScore");
+const scoreLkwEl = document.getElementById("scoreLkw");
+const scoreCarEl = document.getElementById("scoreCar");
+const trafficLightEl = document.getElementById("trafficLight");
+const finishLkwEl = document.getElementById("finishLkw");
+const finishCarEl = document.getElementById("finishCar");
+
+// Ampel-PNGs
+const AMPEL = {
+  pre: "images/ampel.png",   // ✅ Standbild (klein geschrieben)
+  1:   "images/ampel1.png",
+  2:   "images/ampel2.png",
+  3:   "images/ampel3.png",
+};
+
+
+// Beep (OneShot)
+function playBeep(){
+  const a = new Audio("audio/beep1.wav");
+  a.preload = "auto";
+  a.volume = 0.95;
+  a.play().catch(()=>{});
+}
+function setTrafficLight(step){
+  if (!trafficLightEl) return;
+  const src = AMPEL[step];
+  if (!src) return;
+  trafficLightEl.src = src;
+  trafficLightEl.style.display = "block";
+}
+function hideTrafficLight(){
+  if (!trafficLightEl) return;
+  trafficLightEl.style.display = "none";
+}
+function resetFinishIcons(){
+  if (finishLkwEl) finishLkwEl.style.display = "none";
+  if (finishCarEl) finishCarEl.style.display = "none";
+}
+
+
+let svg=null, path=null, length=0;
+let pathIsClosed = true;
+let endToStartDist = 0;
+let startS=0;
+
+const SPEED = 560;
+const STEER_SPEED = 220;
+const ALIGN_TOL   = 120;
+
+const TRACK_HALF_WIDTH = 40;
+const OFF_ACCEL = 900;
+const OFF_DRAG  = 5.0;
+const CAR_RADIUS = 34;
+
+const ACCEL = 2000;
+const DRAG  = 4.2;
+const BRAKE = 8.0;
+
+let raf=null, lastFrame=null;
+
+const players = {
+  p1: { el:lkwEl, keys:new Set(), started:false, finished:false, time:0, dist:0, s:0, lastRel:0, v:0, off: -18, offV: 0 },
+  p2: { el:carEl, keys:new Set(), started:false, finished:false, time:0, dist:0, s:0, lastRel:0, v:0, off: +18, offV: 0 }
+};
+
+let steerAngleP1 = 0;
+let steerAngleP2 = 0;
+
+let raceState = "idle";
+let countdownEnd = 0;
+let lastCountdownText = "";
+
+const lastScore = { p1:null, p2:null };
+function fmt(sec){ return (typeof sec==="number" ? sec.toFixed(3)+" s" : "—"); }
+
+/* =========================
+   SCORE STORAGE (per Track)
+   ========================= */
+const SCORE_KEY = "anlieferzone_scores_v1";
+let currentTrackId = null;
+
+function loadScoreDB(){
+  try{
+    const raw = localStorage.getItem(SCORE_KEY);
+    const db = raw ? JSON.parse(raw) : {};
+    return (db && typeof db === "object") ? db : {};
+  }catch{
+    return {};
+  }
+}
+function saveScoreDB(db){
+  try{ localStorage.setItem(SCORE_KEY, JSON.stringify(db)); }catch{}
+}
+
+function recordScore(trackId, tLkw, tCar){
+  if (!trackId) return;
+  if (typeof tLkw !== "number" || typeof tCar !== "number") return;
+
+  const db = loadScoreDB();
+  if (!db[trackId]) db[trackId] = [];
+
+  db[trackId].push({
+    ts: Date.now(),
+    lkw: tLkw,
+    car: tCar
+  });
+
+  // optional: begrenzen (z.B. letzte 40 Läufe pro Track)
+  if (db[trackId].length > 40) db[trackId] = db[trackId].slice(-40);
+
+  saveScoreDB(db);
+}
+
+function bestTime(entries, key){
+  let best = null;
+  for (const e of entries){
+    const v = e?.[key];
+    if (typeof v !== "number") continue;
+    if (best == null || v < best) best = v;
+  }
+  return best;
+}
+
+
+function showScoreboard(){
+  const db = loadScoreDB();
+
+  const wrap = document.createElement("div");
+  wrap.style.fontFamily = "system-ui, sans-serif";
+  wrap.style.fontSize = "15px";
+  wrap.style.lineHeight = "1.35";
+
+  const title = document.createElement("div");
+  title.innerHTML = `<b>Scores (gespeichert)</b>`;
+  wrap.appendChild(title);
+
+  const list = document.createElement("div");
+  list.style.marginTop = "12px";
+  list.style.display = "grid";
+  list.style.gap = "14px";
+  wrap.appendChild(list);
+
+  // Tracks in stabiler Reihenfolge A1..J10
+  for (let i=0; i<N; i++){
+    const id = idFromIndex(i);
+    const entries = db[id];
+    if (!Array.isArray(entries) || entries.length === 0) continue;
+
+    const bestL = bestTime(entries, "lkw");
+    const bestC = bestTime(entries, "car");
+    const last = entries[entries.length - 1];
+
+    const card = document.createElement("div");
+    card.style.border = "1px solid rgba(0,0,0,0.12)";
+    card.style.borderRadius = "12px";
+    card.style.padding = "10px 12px";
+    card.style.background = "rgba(255,255,255,0.65)";
+
+    const head = document.createElement("div");
+    head.style.display = "flex";
+    head.style.alignItems = "baseline";
+    head.style.justifyContent = "space-between";
+    head.innerHTML = `<div style="font-family:g1,sans-serif;font-size:22px;text-transform:uppercase;">${id}</div>
+                      <div style="opacity:0.7;">Runs: ${entries.length}</div>`;
+    card.appendChild(head);
+
+    const rows = document.createElement("div");
+    rows.style.marginTop = "8px";
+    rows.innerHTML = `
+      <div>Best LKW: <b>${fmt(bestL)}</b> &nbsp;&nbsp; Best CAR: <b>${fmt(bestC)}</b></div>
+      <div style="margin-top:6px;opacity:0.9;">Last: LKW ${fmt(last?.lkw)} &nbsp;&nbsp; CAR ${fmt(last?.car)}</div>
+    `;
+    card.appendChild(rows);
+
+    list.appendChild(card);
+  }
+
+  if (!list.children.length){
+    const empty = document.createElement("div");
+    empty.style.marginTop = "10px";
+    empty.style.opacity = "0.75";
+    empty.textContent = "Noch keine gespeicherten Scores.";
+    wrap.appendChild(empty);
+  }
+
+  openPanel("SCOREBOARD", wrap);
+}
+
+
+function resetHud(){
+  raceHud.style.display = "block";
+  raceCountdownEl.style.display = "none";
+  raceScoreEl.style.display = "none";
+  timerLkwEl.textContent = "0.000 s";
+  timerCarEl.textContent = "0.000 s";
+  scoreLkwEl.textContent = "—";
+  scoreCarEl.textContent = "—";
+  hideTrafficLight();
+resetFinishIcons();
+
+}
+
+function beginCountdown(now){
+  raceState = "countdown";
+
+  // ✅ 4 Phasen: (3+pre), (2+ampel1), (1+ampel2), (GO+ampel3)
+  countdownEnd = now + 4000;
+
+  lastCountdownText = "";
+  raceCountdownEl.style.display = "block";
+  raceScoreEl.style.display = "none";
+
+  // ✅ Beep nur EINMAL zu Beginn
+  playBeep();
+
+  // direkt initial setzen (damit sofort 3 + ampel.png sichtbar ist)
+  raceCountdownEl.textContent = "3";
+  setTrafficLight("pre");
+  lastCountdownText = "3";
+}
+
+
+
+function beginRace(){
+  raceState = "running";
+  raceCountdownEl.style.display = "none";
+  hideTrafficLight();
+  lastFrame = null;
+
+  for (const k of ["p1","p2"]){
+    const pl = players[k];
+    pl.started=false; pl.finished=false; pl.time=0; pl.dist=0; pl.v=0;
+    pl.lastRel = relToStart(pl.s);
+  }
+}
+
+function finishIfBoth(){
+  if (players.p1.finished && players.p2.finished){
+    raceState = "finished";
+    raceScoreEl.style.display = "block";
+    scoreLkwEl.textContent = fmt(lastScore.p1);
+    scoreCarEl.textContent = fmt(lastScore.p2);
+    recordScore(currentTrackId, lastScore.p1, lastScore.p2);
+  }
+}
+
+function closeTrack(){
+  trackOverlay.style.display = "none";
+  trackOverlay.innerHTML = "";
+  svg=null; path=null; length=0;
+  lkwEl.style.display="none";
+  carEl.style.display="none";
+  raceHud.style.display="none";
+  raceState="idle";
+  players.p1.keys.clear();
+  players.p2.keys.clear();
+}
+trackOverlay.addEventListener("click",(e)=>{ if (e.target===trackOverlay) closeTrack(); });
+
+function escapeHtml(s){
+  return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+}
+
+function wrap(s,len){
+  if (len<=0) return 0;
+  s = s % len;
+  if (s<0) s += len;
+  return s;
+}
+function relToStart(s){
+  if (!length) return 0;
+  return ((s - startS) % length + length) % length;
+}
+function dist(a,b){
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return Math.hypot(dx, dy);
+}
+function detectClosedPath(p){
+  const a = p.getPointAtLength(0);
+  const b = p.getPointAtLength(p.getTotalLength());
+  const d = dist(a,b);
+  return { closed: d < 4, d };
+}
+function angleDegAtS(s){
+  const s1 = wrap(s, length);
+  const s2 = wrap(s + 3, length);
+  const p1 = path.getPointAtLength(s1);
+  const p2 = path.getPointAtLength(s2);
+  let a = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
+  if (a < 0) a += 360;
+  return a;
+}
+function angDiff(a,b){
+  let d = (a - b) % 360;
+  if (d < -180) d += 360;
+  if (d > 180) d -= 360;
+  return d;
+}
+
+function place(pl){
+  if (!svg || !path || !length) return;
+
+  const s = wrap(pl.s, length);
+  const pLocal = path.getPointAtLength(s);
+
+  const s2 = wrap(s + 2.5, length);
+  const p2 = path.getPointAtLength(s2);
+
+  let tx = (p2.x - pLocal.x), ty = (p2.y - pLocal.y);
+  const tl = Math.hypot(tx, ty) || 1;
+  tx /= tl; ty /= tl;
+
+  let nx = -ty, ny = tx;
+
+  const maxOff = Math.max(0, TRACK_HALF_WIDTH - CAR_RADIUS);
+  pl.off = Math.max(-maxOff, Math.min(maxOff, pl.off));
+
+  const shifted = { x: pLocal.x + nx * pl.off, y: pLocal.y + ny * pl.off };
+
+  const ctm = path.getScreenCTM();
+  if (!ctm) return;
+
+  const pt = svg.createSVGPoint();
+  pt.x = shifted.x; pt.y = shifted.y;
+  const p = pt.matrixTransform(ctm);
+
+  pl.el.style.left = p.x + "px";
+  pl.el.style.top  = p.y + "px";
+
+  const ang = Math.atan2(ty, tx) * 180 / Math.PI;
+  pl.el.style.transform = `translate(-50%,-50%) scale(0.82) rotate(${ang}deg)`;
+}
+
+function findLowestPointS(pathEl, len){
+  let bestS=0, bestY=-Infinity;
+  const step = Math.max(2, len/1800);
+  for (let s=0; s<=len; s+=step){
+    const p = pathEl.getPointAtLength(s);
+    if (p.y > bestY){ bestY = p.y; bestS = s; }
+  }
+  const a = Math.max(0, bestS-step), b = Math.min(len, bestS+step);
+  for (let s=a; s<=b; s+=step/10){
+    const p = pathEl.getPointAtLength(s);
+    if (p.y > bestY){ bestY = p.y; bestS = s; }
+  }
+  return bestS;
+}
+
+async function openTrackById(id){
+  setBlackPreview(id);
+  currentTrackId = id;   // ✅ damit Scoreboard weiß, zu welchem Track der Lauf gehört
+  closePanel();
+  closeArtefaktViewer();
+
+  trackOverlay.style.display = "block";
+  trackOverlay.innerHTML = "";
+
+  playRandomVehicleSound();
+
+  const bg = document.createElement("img");
+  bg.id = "trackBg";
+  bg.alt = "";
+  bg.src = `images/${id}_mousetrack.png`;
+  trackOverlay.appendChild(bg);
+
+  resetHud();
+
+  const svgPath = trackSvgPathForId(id);
+  try{
+    const res = await fetch(svgPath, { cache:"no-store" });
+    if (!res.ok) throw new Error(`Track fehlt (noch): ${svgPath}`);
+
+    const text = await res.text();
+    trackOverlay.insertAdjacentHTML("beforeend", text);
+
+    svg = trackOverlay.querySelector("svg");
+    if (!svg) throw new Error("Kein <svg> im geladenen Track gefunden");
+
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+    path = svg.querySelector("path");
+    if (!path) throw new Error("Kein <path> im Track-SVG gefunden");
+
+    length = path.getTotalLength();
+
+    const chk = detectClosedPath(path);
+    pathIsClosed = chk.closed;
+    endToStartDist = chk.d;
+
+    if (!pathIsClosed) {
+      trackOverlay.insertAdjacentHTML("beforeend", `
+        <div style="position:fixed;left:20px;top:20px;padding:10px 12px;
+                    background:rgba(0,0,0,0.65);color:#fff;font:14px/1.4 system-ui;
+                    border-radius:10px;max-width:70ch;z-index:999999;">
+          <b>Hinweis:</b> Track-Pfad ist nicht geschlossen.<br/>
+          Endpunkt-Abstand zum Start: <code>${endToStartDist.toFixed(2)}</code><br/>
+          Schließe den Pfad im SVG (z.B. mit <code>Z</code>), sonst wirkt das Wrapping wie “Umdrehen”.
+        </div>
+      `);
+    }
+
+    startS = findLowestPointS(path, length);
+
+    players.p1.s = wrap(startS, length);
+    players.p2.s = wrap(startS + 24, length);
+
+    players.p1.off = -5;
+    players.p2.off = +5;
+    players.p1.offV = players.p2.offV = 0;
+    players.p1.v = players.p2.v = 0;
+
+    steerAngleP1 = angleDegAtS(players.p1.s);
+    steerAngleP2 = angleDegAtS(players.p2.s);
+
+    lkwEl.style.display="block";
+    carEl.style.display="block";
+
+    place(players.p1);
+    place(players.p2);
+
+    raceState = "idle";
+    lastScore.p1 = null;
+    lastScore.p2 = null;
+
+    ensureLoop();
+  } catch(err){
+    console.error(err);
+    trackOverlay.innerHTML = `
+      <div style="position:fixed;left:20px;top:20px;padding:12px;
+                  background:rgba(0,0,0,0.75);color:#fff;font:14px/1.4 system-ui;
+                  border-radius:10px;max-width:70ch;">
+        <b>Track konnte nicht geladen werden.</b><br/>
+        <code>${escapeHtml(err.message)}</code>
+        <div style="margin-top:10px;opacity:.9">Klick ins Leere zum Schließen.</div>
+      </div>`;
+    svg=null; path=null; length=0;
+    lkwEl.style.display="none";
+    carEl.style.display="none";
+    raceHud.style.display="none";
+  }
+}
+
+/* =========================
+   Input
+   ========================= */
+function normKey(k){ return k.startsWith("Arrow") ? k : k.toLowerCase(); }
+
+document.addEventListener("keydown",(e)=>{
+  if (e.key==="Escape"){
+    if (panelOverlay.style.display==="block") closePanel();
+    else if (arteOverlay.style.display==="block") closeArtefaktViewer();
+    else if (trackOverlay.style.display==="block") closeTrack();
+    return;
+  }
+
+  if (arteOverlay.style.display==="block"){
+    if (e.key==="ArrowLeft"){ e.preventDefault(); arteIndex=(arteIndex+99)%N; renderArtefakt(); }
+    if (e.key==="ArrowRight"){ e.preventDefault(); arteIndex=(arteIndex+1)%N; renderArtefakt(); }
+    return;
+  }
+
+  const trackOpen = (trackOverlay.style.display==="block" && path && length);
+  if (!trackOpen) return;
+
+  const k = normKey(e.key);
+  if (k.startsWith("Arrow")) e.preventDefault();
+
+  if (k === "ArrowUp" || k === "ArrowLeft" || k === "ArrowRight") players.p1.keys.add(k);
+  if (k === "w" || k === "a" || k === "d") players.p2.keys.add(k);
+
+  if (raceState==="idle" && (players.p1.keys.size>0 || players.p2.keys.size>0)){
+    beginCountdown(performance.now());
+  }
+
+  ensureLoop();
+},{ passive:false });
+
+document.addEventListener("keyup",(e)=>{
+  const k = normKey(e.key);
+  players.p1.keys.delete(k);
+  players.p2.keys.delete(k);
+},{ passive:true });
+
+/* =========================
+   Main loop
+   ========================= */
+function ensureLoop(){
+  if (raf) return;
+  lastFrame = null;
+  raf = requestAnimationFrame(tick);
+}
+ensureLoop();
+
+function tick(t){
+  raf = requestAnimationFrame(tick);
+
+  mouseX = lerp(mouseX, mouseTx, MOUSE_SMOOTH);
+  mouseY = lerp(mouseY, mouseTy, MOUSE_SMOOTH);
+  updateCoords();
+
+  if (!svg || !path || !length) { lastFrame = t; return; }
+
+if (raceState==="countdown"){
+  const now = performance.now();
+  const msLeft = Math.max(0, countdownEnd - now);
+
+  // 4..1 (4 = Phase "3 + ampel.png")
+  const s = Math.ceil(msLeft / 1000);
+
+  // Phase bestimmen:
+  // s=4 -> "3" + pre (ampel.png)
+  // s=3 -> "2" + ampel1
+  // s=2 -> "1" + ampel2
+  // s=1 -> "GO" + ampel3
+  let txt = "";
+  if (s >= 4) txt = "3";
+  else if (s === 3) txt = "2";
+  else if (s === 2) txt = "1";
+  else if (s === 1) txt = "GO";
+  else txt = "GO";
+
+  if (txt !== lastCountdownText){
+    lastCountdownText = txt;
+    raceCountdownEl.textContent = txt;
+
+    if (s >= 4){
+      setTrafficLight("pre"); // ampel.png
+    } else if (s === 3){
+      setTrafficLight(1);     // ampel1.png
+    } else if (s === 2){
+      setTrafficLight(2);     // ampel2.png
+    } else {
+      setTrafficLight(3);     // ampel3.png (bei GO)
+    }
+  }
+
+  // ✅ Autos dürfen erst nach der GO-Phase los: beginRace erst nach 4s
+  if (now >= countdownEnd) beginRace();
+
+  lastFrame = t;
+  return;
+}
+
+
+  if (raceState!=="running"){ lastFrame = t; return; }
+
+  if (lastFrame==null){ lastFrame=t; return; }
+  const dt = (t-lastFrame)/1000;
+  lastFrame = t;
+
+  for (const id of ["p1","p2"]){
+    const pl = players[id];
+    if (pl.finished) continue;
+
+    let speedFactor = 0;
+    let gasPressed = false;
+
+    if (id === "p1") {
+      gasPressed = pl.keys.has("ArrowUp");
+      const left  = pl.keys.has("ArrowLeft");
+      const right = pl.keys.has("ArrowRight");
+
+      if (left)  steerAngleP1 = (steerAngleP1 - STEER_SPEED * dt + 360) % 360;
+      if (right) steerAngleP1 = (steerAngleP1 + STEER_SPEED * dt) % 360;
+
+      const steer = (left ? -1 : 0) + (right ? +1 : 0);
+      pl.offV += steer * OFF_ACCEL * dt;
+      pl.offV *= Math.exp(-OFF_DRAG * dt);
+      pl.off += pl.offV * dt;
+
+      const aTrack = angleDegAtS(pl.s);
+      const diff = Math.abs(angDiff(steerAngleP1, aTrack));
+      speedFactor = clamp01(1 - (diff / ALIGN_TOL));
+      speedFactor = speedFactor * speedFactor;
+
+    } else {
+      gasPressed = pl.keys.has("w");
+      const left  = pl.keys.has("a");
+      const right = pl.keys.has("d");
+
+      if (left)  steerAngleP2 = (steerAngleP2 - STEER_SPEED * dt + 360) % 360;
+      if (right) steerAngleP2 = (steerAngleP2 + STEER_SPEED * dt) % 360;
+
+      const steer = (left ? -1 : 0) + (right ? +1 : 0);
+      pl.offV += steer * OFF_ACCEL * dt;
+      pl.offV *= Math.exp(-OFF_DRAG * dt);
+      pl.off += pl.offV * dt;
+
+      const aTrack = angleDegAtS(pl.s);
+      const diff = Math.abs(angDiff(steerAngleP2, aTrack));
+      speedFactor = clamp01(1 - (diff / ALIGN_TOL));
+      speedFactor = speedFactor * speedFactor;
+    }
+
+    const wantsMove = gasPressed && speedFactor > 0.05;
+
+    if (wantsMove && !pl.started){
+      pl.started = true;
+      pl.time = 0;
+      pl.dist = 0;
+      pl.lastRel = relToStart(pl.s);
+      pl.v = 0;
+    }
+
+    if (pl.started && !pl.finished){
+      pl.time += dt;
+
+      const targetV = SPEED * speedFactor;
+
+      if (gasPressed) pl.v += (targetV - pl.v) * clamp01(ACCEL * dt / Math.max(1, SPEED));
+      else pl.v *= Math.exp(-DRAG * dt);
+
+      if (speedFactor < 0.15) pl.v *= Math.exp(-BRAKE * dt);
+
+      const ds = pl.v * dt;
+      if (ds > 0.001) {
+        pl.s = pathIsClosed ? wrap(pl.s + ds, length) : Math.min(pl.s + ds, length);
+        pl.dist += ds;
+        place(pl);
+
+        const rel = relToStart(pl.s);
+        const crossedStart = (rel < pl.lastRel);
+        pl.lastRel = rel;
+
+        if (!pl.finished && pl.dist >= length*0.90 && crossedStart){
+          pl.finished = true;
+          lastScore[id] = pl.time;
+          if (id==="p1") scoreLkwEl.textContent = fmt(pl.time);
+          if (id==="p2") scoreCarEl.textContent = fmt(pl.time);
+          // ✅ Finish Icon einblenden sobald jemand fertig ist
+if (id === "p1" && finishLkwEl) finishLkwEl.style.display = "inline-block";
+if (id === "p2" && finishCarEl) finishCarEl.style.display = "inline-block";
+          finishIfBoth();
+        }
+      }
+    }
+  }
+
+  timerLkwEl.textContent = fmt(players.p1.time);
+  timerCarEl.textContent = fmt(players.p2.time);
+}
+
+/* ===== BlackBox Preview ===== */
+const blackPreviewEl = document.getElementById("blackPreview");
+function setBlackPreview(id){
+  if (!blackPreviewEl) return;
+  blackPreviewEl.src = `images/${id}_mousetrack.png`;
+}
+window.addEventListener("load", () => setBlackPreview("A1"));
+
+/* =========================
+   WEATHER SYSTEM
+   (dein Block – unverändert; nur Idle-Hooks unten bleiben)
+   ========================= */
+(() => {
+  const canvas = document.getElementById("weatherCanvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  const ASSETS = {
+    rain:   ["images/regen/regen1.png", "images/regen/regen2.png", "images/regen/regen3.png"],
+    snow:   ["images/schnee1.png", "images/schnee2.png"],
+    sun:    ["images/sonne1.png"],
+    clouds: ["images/wolke1.png","images/wolke2.png","images/wolke3.png","images/wolke4.png","images/wolke5.png"],
+// ✅ NEU — Artefakt Regen (10 random Bilder)
+  arte: Array.from({length:10}, (_,i)=>`images/onlyartefakt/arte${i+1}.png`)
+};  
+
+  function loadImages(list){
+    return list.map(src => { const im = new Image(); im.src = src; return im; });
+  }
+
+  const IMG = {
+    rain:   loadImages(ASSETS.rain),
+    snow:   loadImages(ASSETS.snow),
+    sun:    loadImages(ASSETS.sun),
+    clouds: loadImages(ASSETS.clouds),
+    arte:   loadImages(ASSETS.arte)
+  };
+
+  let W=1,H=1,dpr=1;
+  function resize(){
+    dpr = Math.max(1, window.devicePixelRatio || 1);
+    W = Math.max(1, window.innerWidth);
+    H = Math.max(1, window.innerHeight);
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener("resize", resize, { passive:true });
+  resize();
+
+  const TAU = Math.PI * 2;
+  function rand(a,b){ return a + Math.random()*(b-a); }
+  function pick(arr){ return arr[(Math.random()*arr.length)|0]; }
+  function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+  function easeInOut(t){ return t*t*(3 - 2*t); }
+
+  const WX = {
+    wind: false,
+    cloudSpeedMult: 1,
+    rainAngleRange: 22,
+    rainAngleRangeWind: 34,
+    rainWindBase: 520,
+    snowBlizzardChance: 0.35,
+  };
+  function setWind(on){
+    WX.wind = !!on;
+    WX.cloudSpeedMult = WX.wind ? 2.0 : 1.0;
+  }
+
+  function makeRain(){
+    const drops = [];
+    const cfg = { count: 280, grav: 820, stretch: 1.08 };
+
+    let angleDeg = 0;
+    let windX = 0;
+    let angleHold = 0;
+
+    function makeArteRain(){
+  const drops = [];
+  const cfg = { count: 180, grav: 780, stretch: 1.0 };
+
+  function spawn(){
+    const img = pick(IMG.arte);
+    const scale = rand(0.10, 0.22);   // etwas größer als Regen
+    drops.push({
+      img,
+      x: rand(-120, W+120),
+      y: rand(-H, 0),
+      vy: rand(420, 820),
+      scale,
+      rot: rand(0, Math.PI*2),
+      spin: rand(-1.2, 1.2)
+    });
+  }
+
+  function ensure(){
+    while (drops.length < cfg.count) spawn();
+    while (drops.length > cfg.count) drops.pop();
+  }
+
+  return {
+    start(){
+      drops.length = 0;
+      ensure();
+    },
+    update(dt){
+      ensure();
+      for (let i=drops.length-1; i>=0; i--){
+        const d = drops[i];
+        d.vy += cfg.grav * dt;
+        d.y  += d.vy * dt;
+        d.rot += d.spin * dt;
+
+        if (d.y > H + 200){
+          drops.splice(i,1);
+          spawn();
+        }
+      }
+    },
+    draw(alpha){
+      if (alpha <= 0.001) return;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      for (const d of drops){
+        const im = d.img;
+        if (!im.complete || !im.naturalWidth) continue;
+
+        const w = im.naturalWidth  * d.scale;
+        const h = im.naturalHeight * d.scale;
+
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        ctx.rotate(d.rot);
+        ctx.drawImage(im, -w/2, -h/2, w, h);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+  };
+}
+
+
+    function pickNewAngle(){
+      const range = WX.wind ? WX.rainAngleRangeWind : WX.rainAngleRange;
+      angleDeg = rand(-range, range);
+      windX = -Math.tan(angleDeg * Math.PI/180) * WX.rainWindBase;
+      angleHold = WX.wind ? rand(3.5, 9.0) : rand(6, 16);
+    }
+
+    function spawn(){
+      const img = pick(IMG.rain);
+      const scale = (img === IMG.rain[0]) ? rand(0.035,0.070)
+                  : (img === IMG.rain[1]) ? rand(0.045,0.090)
+                  :                        rand(0.055,0.110);
+
+      drops.push({ img, x: rand(-120, W+120), y: rand(-H, 0), vy: rand(520, 1150), scale });
+    }
+
+    function ensure(){
+      while (drops.length < cfg.count) spawn();
+      while (drops.length > cfg.count) drops.pop();
+    }
+
+    return {
+      start(){ drops.length = 0; pickNewAngle(); ensure(); },
+      update(dt){
+        ensure();
+        angleHold -= dt;
+        if (angleHold <= 0) pickNewAngle();
+
+        for (let i=drops.length-1; i>=0; i--){
+          const d = drops[i];
+          d.vy += cfg.grav * dt;
+          d.x  += windX * dt;
+          d.y  += d.vy * dt;
+          if (d.y > H + 200 || d.x < -260 || d.x > W + 260){
+            drops.splice(i,1); spawn();
+          }
+        }
+      },
+      draw(alpha){
+        if (alpha <= 0.001) return;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+
+        for (const d of drops){
+          const im = d.img;
+          if (!im.complete || !im.naturalWidth) continue;
+
+          const w = im.naturalWidth  * d.scale;
+          const h = im.naturalHeight * d.scale * cfg.stretch;
+
+          ctx.save();
+          ctx.translate(d.x, d.y);
+          ctx.rotate(angleDeg * Math.PI/180);
+          ctx.drawImage(im, -w/2, -h/2, w, h);
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+    };
+  }
+
+  function makeSnow(){
+    const flakes = [];
+    let cfg = null;
+
+    function setRandomSnowMode(){
+      if (WX.wind){
+        cfg = { count: 520, wind: rand(-190,-90), grav: rand(260,520), drift: 3.2, sway: 2.1 };
+        return;
+      }
+      const blizzard = Math.random() < WX.snowBlizzardChance;
+      cfg = blizzard
+        ? { count: 380, wind: rand(-140,-60), grav: rand(220,420), drift: 2.6, sway: 1.8 }
+        : { count: 190, wind: rand(-45, 15),  grav: rand(80, 170),  drift: 1.2, sway: 1.0 };
+    }
+
+    function spawn(){
+      const img = pick(IMG.snow);
+      const scale = (img === IMG.snow[0]) ? rand(0.08,0.18) : rand(0.06,0.16);
+      flakes.push({
+        img, x: rand(-60, W+60), y: rand(-H, 0),
+        vx: rand(cfg.wind-30, cfg.wind+30),
+        vy: rand(cfg.grav*0.7, cfg.grav*1.4),
+        scale, phase: rand(0, TAU),
+        spin: rand(-0.35, 0.35),
+        rot: rand(0, TAU),
+      });
+    }
+
+    function ensure(){
+      while (flakes.length < cfg.count) spawn();
+      while (flakes.length > cfg.count) flakes.pop();
+    }
+
+    return {
+      start(){ setRandomSnowMode(); flakes.length = 0; ensure(); },
+      update(dt, tSec){
+        ensure();
+        for (let i=flakes.length-1; i>=0; i--){
+          const f = flakes[i];
+          const sway = Math.sin(f.phase + tSec*cfg.sway) * (22 * cfg.drift);
+          f.x += (f.vx * dt) + (sway * dt);
+          f.y += f.vy * dt;
+          f.rot += f.spin * dt;
+          if (f.y > H + 120 || f.x < -220 || f.x > W + 220){
+            flakes.splice(i,1); spawn();
+          }
+        }
+      },
+      draw(alpha){
+        if (alpha <= 0.001) return;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        for (const f of flakes){
+          const im = f.img;
+          if (!im.complete || !im.naturalWidth) continue;
+          const w = im.naturalWidth  * f.scale;
+          const h = im.naturalHeight * f.scale;
+          ctx.save();
+          ctx.translate(f.x, f.y);
+          ctx.rotate(f.rot);
+          ctx.drawImage(im, -w/2, -h/2, w, h);
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+    };
+  }
+
+  function makeClouds(){
+    const clouds = [];
+    let gust = 1;
+    let gustT = 0;
+
+    function spawnCloud(fast=false){
+      const img = pick(IMG.clouds);
+      const scale = rand(0.35, 1.00);
+      const baseV = fast ? rand(90, 180) : rand(8, 24);
+
+      clouds.push({
+        img, scale,
+        x: rand(-W*0.6, -120),
+        y: rand(-H*0.06, H*0.55),
+        vx: baseV,
+        a: 0,
+        targetA: rand(0.50, 0.92),
+        life: 0,
+        fadeInDur: rand(3.0, 6.5),
+        outAt: rand(22, 60),
+        fadeOutDur: rand(3.0, 6.5),
+      });
+    }
+
+    function ensure(){
+      const target = cloudsForceDense ? 14 : 7;
+      while (clouds.length < target) spawnCloud(false);
+      while (clouds.length > target) clouds.pop();
+    }
+
+    return {
+      start(){ clouds.length = 0; ensure(); gust=1; gustT=0; },
+      update(dt){
+        ensure();
+
+        if (gustT <= 0 && Math.random() < 0.01){
+          gustT = rand(1.4, 3.2);
+          gust = rand(2.2, 4.0);
+          if (Math.random() < 0.7) spawnCloud(true);
+          if (Math.random() < 0.35) spawnCloud(true);
+        }
+        if (gustT > 0){
+          gustT -= dt;
+          if (gustT <= 0){ gustT = 0; gust = 1; }
+        }
+
+        for (let i=clouds.length-1; i>=0; i--){
+          const c = clouds[i];
+          c.life += dt;
+          c.x += c.vx * dt * gust * WX.cloudSpeedMult;
+
+          const fin = clamp01(c.life / (c.fadeInDur || 4.5));
+          const fadeIn = easeInOut(fin);
+
+          const foutRaw = (c.life > c.outAt) ? clamp01((c.life - c.outAt) / (c.fadeOutDur || 4.5)) : 0;
+          const fadeOut = 1 - easeInOut(foutRaw);
+
+          const breathe = 0.96 + Math.sin(c.life * 0.45) * 0.04;
+          c.a = c.targetA * fadeIn * fadeOut * breathe;
+
+          if (c.x > W + 420 || fadeOut <= 0.001){
+            clouds.splice(i,1);
+            spawnCloud(false);
+          }
+        }
+      },
+      draw(alpha){
+        if (alpha <= 0.001) return;
+        ctx.save();
+        for (const c of clouds){
+          const im = c.img;
+          if (!im.complete || !im.naturalWidth) continue;
+          const w = im.naturalWidth  * c.scale;
+          const h = im.naturalHeight * c.scale;
+          const darken = cloudsForceDense ? 1.35 : 1;
+          ctx.globalAlpha = alpha * c.a * darken;
+          ctx.drawImage(im, c.x, c.y, w, h);
+        }
+        ctx.restore();
+      }
+    };
+  }
+
+  function makeSun(){
+    let a = 0;
+    let fadeSpeed = 0.35;
+    return {
+      start(){ a=0; fadeSpeed = rand(0.18, 0.38); },
+      update(dt){ a = Math.min(1, a + fadeSpeed * dt); },
+      draw(alpha){
+        const im = IMG.sun[0];
+        if (!im || !im.complete || !im.naturalWidth) return;
+        const baseScale = Math.min(W, H) / 1200;
+        const scale = baseScale * 0.9;
+        const w = im.naturalWidth  * scale;
+        const h = im.naturalHeight * scale;
+        const x = W - w - 80;
+        const y = 60;
+        ctx.save();
+        ctx.globalAlpha = alpha * a;
+        ctx.drawImage(im, x, y, w, h);
+        ctx.restore();
+      }
+    };
+  }
+
+  const ENGINES = { rain: makeRain(), snow: makeSnow(), clouds: makeClouds(), sun: makeSun() };
+
+  window.addEventListener("typewriterstart", () => {
+    skyCloudsOn = true;
+    ENGINES.clouds.start();
+    cloudsForceDense = true;
+    gustBoost = 1.4;
+    gustBoostT = 1.6;
+  });
+
+  function updateWeatherAudio(){
+    if (WX.wind){ playWeather("audio/wind1.wav"); return; }
+    const rainActive = (precipCurr === "rain") || (precipNext === "rain");
+    if (rainActive){ playWeather("audio/regen1.wav"); return; }
+    stopWeather();
+  }
+
+  let running = false;
+  let tSec = 0;
+  let lastMs = null;
+
+  let gustBoost = 1;
+  let gustBoostT = 0;
+  let cloudsForceDense = false;
+
+  let skySunOn = false;
+  let skyCloudsOn = false;
+
+  let precipCurr = "none";
+  let precipNext = null;
+
+  let precipFading = false;
+  let precipT = 1;
+  let precipDur = 3.2;
+
+  let nextSwitchAt = 0;
+  function scheduleNext(){ nextSwitchAt = tSec + rand(10, 60); }
+
+  function pickPrecipNext(){
+    const r = Math.random();
+    if (r < 0.45) return "none";
+    if (r < 0.80) return "rain";
+    return "snow";
+  }
+
+  function toggleSkyRandom(){
+    const clouds = Math.random() < 0.75;
+    const sun = Math.random() < 0.35;
+
+    const sunChanged = (sun !== skySunOn);
+    const cloudsChanged = (clouds !== skyCloudsOn);
+
+    skySunOn = sun;
+    skyCloudsOn = clouds;
+
+    if (sunChanged && skySunOn) ENGINES.sun.start();
+    if (cloudsChanged && skyCloudsOn) ENGINES.clouds.start();
+  }
+
+  function startSystem(){
+    if (running) return;
+    running = true;
+
+    precipCurr = Math.random() < 0.5 ? "rain" : "snow";
+    precipNext = precipCurr;
+    precipT = 1;
+
+    setWind(Math.random() < 0.25);
+    toggleSkyRandom();
+
+    if (precipCurr !== "none") ENGINES[precipCurr].start();
+    if (skyCloudsOn) ENGINES.clouds.start();
+
+    scheduleNext();
+    updateWeatherAudio();
+
+    requestAnimationFrame(frame);
+  }
+
+  function stopSystem(){
+    running = false;
+    cloudsForceDense = false;
+    skySunOn = false;
+    skyCloudsOn = false;
+    precipCurr = "none";
+    precipNext = null;
+    precipFading = false;
+    precipT = 1;
+    lastMs = null;
+    ctx.clearRect(0,0,W,H);
+  }
+
+  function beginPrecipFadeTo(type){
+    if (type === precipCurr) { scheduleNext(); return; }
+    precipNext = type;
+    precipFading = true;
+    precipT = 0;
+    precipDur = rand(2.6, 4.2);
+    if (precipNext !== "none") ENGINES[precipNext].start();
+  }
+
+  function commitPrecip(){
+    precipCurr = precipNext;
+    precipNext = null;
+    precipFading = false;
+    precipT = 1;
+    scheduleNext();
+  }
+
+  function frame(ms){
+    requestAnimationFrame(frame);
+    if (!running) return;
+
+    if (lastMs == null) lastMs = ms;
+    const dt = Math.min(0.033, (ms - lastMs)/1000);
+    lastMs = ms;
+    tSec += dt;
+
+    if (tSec >= nextSwitchAt){
+      setWind(Math.random() < 0.25);
+      toggleSkyRandom();
+      beginPrecipFadeTo(pickPrecipNext());
+      updateWeatherAudio();
+    }
+
+    if (skySunOn) ENGINES.sun.update?.(dt, tSec);
+
+    if (gustBoostT > 0){
+      gustBoostT -= dt;
+      if (gustBoostT <= 0){ gustBoostT = 0; gustBoost = 1; }
+    }
+    if (skyCloudsOn) ENGINES.clouds.update?.(dt * gustBoost, tSec);
+
+    if (precipCurr !== "none") ENGINES[precipCurr].update?.(dt, tSec);
+    if (precipNext && precipNext !== "none") ENGINES[precipNext].update?.(dt, tSec);
+
+    ctx.clearRect(0,0,W,H);
+
+    const sunAlpha = skyCloudsOn ? 0.38 : 1.0;
+    if (skySunOn) ENGINES.sun.draw?.(sunAlpha);
+    if (skyCloudsOn) ENGINES.clouds.draw?.(1);
+
+    if (precipFading){
+      precipT = Math.min(1, precipT + dt / Math.max(0.001, precipDur));
+      const e = easeInOut(precipT);
+      const aNext = e;
+      const aCurr = 1 - e;
+
+      if (precipCurr !== "none") ENGINES[precipCurr].draw?.(aCurr);
+      if (precipNext !== "none") ENGINES[precipNext].draw?.(aNext);
+
+      if (precipT >= 1) commitPrecip();
+    } else {
+      if (precipCurr !== "none") ENGINES[precipCurr].draw?.(1);
+    }
+  }
+
+  window.addEventListener("idleenter", () => {
+    stopAllVehicleSounds();
+    stopAllClickSounds();
+    stopWeather();
+    masterAmbient.stop();
+
+    if (running) return;
+    startSystem();
+    updateWeatherAudio();
+  });
+
+  window.addEventListener("idleleave", () => {
+    stopSystem();
+    stopWeather();
+    masterAmbient.tryPlay();
+  });
+})();
+</script>
+</body>
+</html>
