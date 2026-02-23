@@ -33,10 +33,6 @@
     z-index:1;
     transition: transform 1.6s ease, filter 1.6s ease, opacity 1.6s ease;
     will-change: transform;
-    /* ✅ verhindert grüne Haarlinien zwischen Bildern */
-  background:#8b8b8b;
-  gap:0;
-    
   }
   .cell{ position:relative; z-index:0; overflow:visible; }
   .cell.isHoverTop{ z-index:9999; }
@@ -118,7 +114,7 @@
   left:50%;
   transform:translateX(-50%);
   font-size:96px;
-  line-height:normal;
+  line-height:0.95;
   margin:0;
   display:none;
 }
@@ -915,8 +911,8 @@ function planLineSizesToFit(text){
     if (!text) return seedSize;
 
     const FILL = 1.01;       // kleiner Overfill gegen Rundung
-    const MIN_S = 4;     // kleiner möglich
-    const MAX_S = 420;   // größer möglich
+    const MIN_S = 10;        // falls du noch kleiner erlauben willst: runter
+    const MAX_S = 900;       // falls du riesiger willst: hoch
 
     const tester = document.createElement("div");
     tester.className = "typeLine";
@@ -969,248 +965,95 @@ function planLineSizesToFit(text){
 function pickFillTarget(){
   const r = Math.random();
 
-  // 92%: ultra-ultra lang => sehr klein
-  if (r < 0.92) return rand(0.997, 0.99985);
+  // sehr selten kurz (große Ausreißer)
+  if (r < 0.02) return rand(0.70, 0.82);
 
-  // 6%: mittel
-  if (r < 0.98) return rand(0.78, 0.90);
+  // selten mittel
+  if (r < 0.08) return rand(0.90, 0.96);
 
-  // 2%: ultra kurz => sehr groß
-  return rand(0.22, 0.40);
+  // fast immer extrem lang
+  return rand(0.985, 0.999);
 }
 
+  // Umbruch-Messung mit fixer Referenzgröße, aber mit variierendem FillTarget
   function breakIntoLinesWithVariation(paragraph, width){
-  const meas = ensureMeasureNode();
-  meas.style.whiteSpace = "nowrap";
+    const meas = ensureMeasureNode();
+    meas.style.whiteSpace = "nowrap";
+    const REF_SIZE = 42;
 
-  // ✅ kleiner = beim Planen passen mehr Wörter in eine Zeile
-  // (wichtig für "viele kleine Zeilen")
-  const REF_SIZE = 20;
-
-  function measure(str){
-    meas.style.fontSize = REF_SIZE + "px";
-    meas.textContent = str || "";
-    return Math.max(1, meas.scrollWidth || meas.getBoundingClientRect().width || 1);
-  }
-
-  const GROUP_MAX = 5;
-
-  // ✅ Modi definieren: TINY = ultralang, HUGE = ultrakurz
-  // TINY häufiger, weil du "mehr kleine Extreme" willst.
-  function pickMode(prev){
-    const r = Math.random();
-    let m = (r < 0.75) ? "TINY" : "HUGE";   // 75% tiny, 25% huge
-    if (m === prev) m = (m === "TINY") ? "HUGE" : "TINY"; // nicht zweimal hintereinander
-    return m;
-  }
-
-  function pickFillTargetForMode(mode){
-    if (mode === "TINY") return rand(0.996, 0.99985); // extrem lang -> sehr klein
-    return rand(0.18, 0.40);                          // extrem kurz -> sehr groß
-  }
-
-  const words = paragraph.split(/\s+/).filter(Boolean);
-  const out = [];
-
-  let cur = "";
-  let prevMode = null;
-  let mode = pickMode(prevMode);
-  let remainingInGroup = GROUP_MAX;
-  let fillTarget = pickFillTargetForMode(mode);
-
-  function startNewGroup(){
-    prevMode = mode;
-    mode = pickMode(prevMode);
-    remainingInGroup = GROUP_MAX;
-    fillTarget = pickFillTargetForMode(mode);
-  }
-
-  for (const w of words){
-    const next = cur ? (cur + " " + w) : w;
-    const tw = measure(next);
-
-    const target = width * fillTarget;
-
-    // ✅ harte Kante: nie über width
-    if (cur && tw > width){
-      out.push(cur);
-      remainingInGroup--;
-
-      if (remainingInGroup <= 0) startNewGroup();
-      // neuer Zeilenlauf innerhalb aktueller Gruppe
-      fillTarget = pickFillTargetForMode(mode);
-
-      cur = w;
-      continue;
+    function measure(str){
+      meas.style.fontSize = REF_SIZE + "px";
+      meas.textContent = str || "";
+      return Math.max(1, meas.scrollWidth || meas.getBoundingClientRect().width || 1);
     }
 
-    // ✅ gruppenbasiertes Brechen:
-    // - HUGE bricht sehr früh (kurze Zeilen)
-    // - TINY bricht sehr spät (lange Zeilen)
-    if (cur && tw >= target){
-      out.push(cur);
-      remainingInGroup--;
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    const out = [];
+    let cur = "";
+    let fillTarget = pickFillTarget();
 
-      if (remainingInGroup <= 0) startNewGroup();
-      fillTarget = pickFillTargetForMode(mode);
+    for (const w of words){
+      const next = cur ? (cur + " " + w) : w;
+      const tw = measure(next);
 
-      cur = w;
-      continue;
+      // Zielbreite für diesen Zeilenlauf
+      const target = width * fillTarget;
+
+     // Nur brechen wenn Zeile wirklich fast voll ist
+if (cur && tw >= width * 0.992){
+  out.push(cur);
+  cur = w;
+  fillTarget = pickFillTarget();
+} else if (cur && tw > width){
+        // harte Kante: darf nie über width
+        out.push(cur);
+        cur = w;
+        fillTarget = pickFillTarget();
+      } else {
+        cur = next;
+      }
     }
-
-    cur = next;
+    if (cur) out.push(cur);
+    return out;
   }
-
-  if (cur) out.push(cur);
-
-  return out;
-}
 
   const width = targetWidthPx();
   const paras = parseParagraphs(String(text || ""));
 
+  // Seed ist nur ein Startwert fürs Fit – Variation kommt vom Umbruch, nicht vom Seed
   function seedForLine(){
-  const r = Math.random();
-
-  // meistens klein starten -> unterstützt kleinen Durchschnitt
-  if (r < 0.70) return rand(8, 22);
-
-  // manchmal sehr groß starten -> erlaubt riesige Ausreißer
-  return rand(60, 160);
-}
+    return rand(8, 10);
+  }
 
   let planned = [];
 
   for (let pi=0; pi<paras.length; pi++){
     const lines = breakIntoLinesWithVariation(paras[pi], width);
 
-    let lineGroup = 0;
-let groupSeed = seedForLine();
-
-for (const ln of lines){
-
-  // spätestens alle 5 Zeilen neue "Größenphase"
-  if (lineGroup >= 5){
-    groupSeed = seedForLine();
-    lineGroup = 0;
-  }
-
-  const sizePx = fitSizeExactDOM(ln, groupSeed, width);
-  planned.push({ text: ln, sizePx });
-
-  lineGroup++;
-}
+    for (const ln of lines){
+      const seed = seedForLine();
+      const sizePx = fitSizeExactDOM(ln, seed, width);
+      planned.push({ text: ln, sizePx });
+    }
 
     if (pi < paras.length - 1){
       planned.push({ text:"", sizePx: 18 });
     }
   }
 
-// =========================
-// EXAKTER HEIGHT-FIT
-// =========================
-const maxH = window.innerHeight - 48;
+  // Höhe fitten: global skalieren, danach NOCHMAL pro Zeile exakt auf Breite fitten (unsichtbar)
+  const maxH = window.innerHeight - 48;
+  let h = measurePlannedHeight(planned);
+  if (h <= maxH) return planned;
 
-// =========================
-// TARGET: mindestens X sichtbare Zeilen
-// =========================
-const TARGET_LINES = 20;
+  const k = maxH / Math.max(1, h);
+  planned = planned.map(ln => ln.text ? ({ ...ln, sizePx: Math.max(10, ln.sizePx * k) }) : ln);
 
-function countRenderableLines(arr){
-  let c = 0;
-  for (const ln of arr) if (ln.text && ln.text.trim()) c++;
-  return c;
-}
-
-// Wenn zu wenige Zeilen -> Umbruch aggressiver (kleinere Schrift = mehr Zeilen)
-let lineGuard = 0;
-while (countRenderableLines(planned) < TARGET_LINES && lineGuard < 10){
-
-  planned = planned.map(ln => {
-    if (!ln.text) return ln;
-    return { ...ln, sizePx: Math.max(2.4, ln.sizePx * 0.92) };
-  });
-
-  // wieder exakt auf Breite fitten
+  // Refit auf Breite nach Skalierung, damit rechts wieder exakt sitzt
   planned = planned.map(ln => {
     if (!ln.text) return ln;
     return { ...ln, sizePx: fitSizeExactDOM(ln.text, ln.sizePx, width) };
   });
-
-  lineGuard++;
-}
-
-// =========================
-// EXAKTER HEIGHT-FIT (kein Pixel Überlauf)
-// =========================
-
-let h = measurePlannedHeight(planned);
-let guard = 0;
-
-while (h > maxH && guard < 60){
-
-  let smallest = Infinity;
-  for (const ln of planned){
-    if (!ln.text) continue;
-    if (ln.sizePx < smallest) smallest = ln.sizePx;
-  }
-
-  const threshold = smallest * 1.35;
-
-  let changed = false;
-
-  planned = planned.map(ln => {
-    if (!ln.text) return ln;
-
-    const fs = ln.sizePx;
-
-    // große Zeilen schützen
-    if (fs > 140) return ln;
-
-    if (fs <= threshold){
-      changed = true;
-      return { ...ln, sizePx: Math.max(2.4, fs * 0.94) };
-    }
-
-    return ln;
-  });
-
-  if (!changed) break;
-
-  planned = planned.map(ln => {
-    if (!ln.text) return ln;
-    return { ...ln, sizePx: fitSizeExactDOM(ln.text, ln.sizePx, width) };
-  });
-
-  h = measurePlannedHeight(planned);
-  guard++;
-}
-
-
-return planned;
-
-// Wie viel müssen wir insgesamt schrumpfen?
-const k = maxH / Math.max(1, h);
-
-// 🔥 Nur kleine Zeilen weiter schrumpfen
-planned = planned.map(ln => {
-  if (!ln.text) return ln;
-
-  const fs = ln.sizePx;
-
-  // große Zeilen ab ~120px nicht weiter schrumpfen
-  if (fs > 120) return ln;
-
-  // kleine Zeilen stärker schrumpfen
-  const factor = 0.75 + (0.25 * k); 
-  return { ...ln, sizePx: Math.max(3, fs * factor) };
-});
-
-// Danach wieder exakt auf Breite fitten
-planned = planned.map(ln => {
-  if (!ln.text) return ln;
-  return { ...ln, sizePx: fitSizeExactDOM(ln.text, ln.sizePx, width) };
-});
 
   return planned;
 }
@@ -1248,13 +1091,6 @@ async function startTyping(){
     currentLineEl = document.createElement("div");
     currentLineEl.className = "typeLine";
     currentLineEl.style.fontSize = ln.sizePx + "px";
-    // ✅ größere Schrift = kleinerer Zeilenabstand
-const fs = ln.sizePx || 20;
-
-// 1.02 bei klein, runter bis 0.78 bei sehr groß
-const lh = Math.max(0.78, Math.min(1.02, 1.06 - (fs / 260)));
-
-currentLineEl.style.lineHeight = lh.toFixed(3);
     currentLineEl.style.transform = "none";
     col0.appendChild(currentLineEl);
     currentLineText = "";

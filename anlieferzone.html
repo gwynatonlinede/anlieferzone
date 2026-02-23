@@ -33,6 +33,10 @@
     z-index:1;
     transition: transform 1.6s ease, filter 1.6s ease, opacity 1.6s ease;
     will-change: transform;
+    /* ✅ verhindert grüne Haarlinien zwischen Bildern */
+  background:#8b8b8b;
+  gap:0;
+    
   }
   .cell{ position:relative; z-index:0; overflow:visible; }
   .cell.isHoverTop{ z-index:9999; }
@@ -86,26 +90,39 @@
   }
 
   /* ===== HUD ===== */
-  #raceHud{
-    position:fixed;
-    top:16px;
-    left:50%;
-    transform:translateX(-50%);
-    z-index:var(--ui-z);
-    font-family:"g1", sans-serif;
-    color:var(--green);
-    text-shadow:0 6px 18px rgba(0,0,0,0.35);
-    user-select:none;
-    pointer-events:none;
-    text-transform:uppercase;
-    letter-spacing:0.02em;
-    display:none;
-    text-align:center;
-  }
-  #raceCountdown{ font-size:96px; line-height:0.95; margin-bottom:10px; display:none; }
-  #raceTimers{ font-size:44px; line-height:1.05; }
-  #raceTimers .tRow{ margin:6px 0; }
-  #raceScore{ margin-top:12px; font-size:34px; line-height:1.05; display:none; }
+ #raceHud{
+  position:fixed;
+  top:16px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:var(--ui-z);
+  font-family:"g1", sans-serif;
+  color:var(--green);
+  text-shadow:0 6px 18px rgba(0,0,0,0.35);
+  user-select:none;
+  pointer-events:none;
+  text-transform:uppercase;
+  letter-spacing:0.02em;
+  display:none;
+  text-align:center;
+
+  /* ✅ Platz reservieren, damit Timer/Score niemals springen */
+  padding-top:210px;
+  box-sizing:border-box;
+}
+
+#raceCountdown{
+  /* ✅ absolute Overlay → drückt nichts mehr */
+  position:absolute;
+  top:0;
+  left:50%;
+  transform:translateX(-50%);
+  font-size:96px;
+  line-height:0.95;
+  margin:0;
+  display:none;
+}
+
 
   /* ===== PLAYERS ===== */
   .player{
@@ -380,6 +397,15 @@
   }
 
   /* ===== TYPEWRITER ===== */
+  /* Typewriter: echte volle Breite bis zum rechten Rand (innerhalb des Overlays) */
+#typeText,
+#typeGrid,
+.typeCol,
+.colContent{
+  width:100%;
+}
+
+
   #typeOverlay{
     position:fixed;
     inset:0;
@@ -388,6 +414,8 @@
     pointer-events:none;
     padding:24px;
     box-sizing:border-box;
+    visibility: hidden;
+    opacity: 0;
   }
 
   #typeText{
@@ -408,14 +436,15 @@
     width:100%;
   }
 
-  /* ✅ jetzt ist #col0 ein DIV, darin kommen .typeLine */
-  .typeLine{
-    white-space: pre-wrap;
-    word-break: keep-all;
-    overflow-wrap: normal;
-    hyphens: none;
-    line-height: 1.05;
-  }
+.typeLine{
+  display:block;            /* ✅ echte Zeilen untereinander */
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  hyphens: none;
+  line-height: 1.05;
+}
+
 
   /* Idle soll NICHT den Hintergrund ändern */
   body.idle{ }
@@ -430,12 +459,20 @@
 
   /* ===== RACE: AMPEL + FINISH ===== */
   #trafficLight{
-    display:none;
-    margin: 8px auto 0;
-    width: 240px; /* ✅ größer */
-    height: auto;
-    filter: drop-shadow(0 10px 20px rgba(0,0,0,0.25));
-  }
+  display:none;
+
+  /* ✅ absolute Overlay → drückt nichts mehr */
+  position:absolute;
+  top:92px;
+  left:50%;
+  transform:translateX(-50%);
+
+  width: 260px;
+  height:auto;
+
+  filter: drop-shadow(0 10px 20px rgba(0,0,0,0.25));
+}
+
 
   .finishIcon{
     display:none;
@@ -748,16 +785,23 @@ window.addEventListener("pointerdown", () => { onAnyClickStackSound(); }, { pass
     return rand(TYPE_MIN, TYPE_MAX);
   }
 
-  function normalizeTypingText(txt){
-    txt = String(txt || "");
-    txt = txt.replace(/[\u00A0\u202F]/g, " ");
-    txt = txt.replace(/[\u200B-\u200D\uFEFF]/g, "");
-    txt = txt.replace(/\r\n?/g, "\n");
-    txt = txt.replace(/\n{2,}/g, "\n\n");
-    txt = txt.replace(/([^\n])\n([^\n])/g, "$1 $2");
-    txt = txt.replace(/[ \t]{2,}/g, " ");
-    return txt.trim();
-  }
+function normalizeTypingText(txt){
+  txt = String(txt || "");
+
+  txt = txt.replace(/[\u00A0\u202F]/g, " ");
+  txt = txt.replace(/[\u200B-\u200D\uFEFF]/g, "");
+  txt = txt.replace(/\r\n?/g, "\n");
+
+  // Mehrfach-Leerzeilen begrenzen
+  txt = txt.replace(/\n{3,}/g, "\n\n");
+
+  // Zeilen trimmen, aber Struktur behalten
+  txt = txt.split("\n").map(l => l.replace(/[ \t]{2,}/g, " ").trim()).join("\n");
+
+  return txt.trim();
+}
+
+
 
   function pickNextTextFile(){
     if (!TEXT_FILES.length) return null;
@@ -777,34 +821,54 @@ window.addEventListener("pointerdown", () => { onAnyClickStackSound(); }, { pass
     return normalizeTypingText(await res.text());
   }
 
-  function show(){ overlay.style.display = "block"; }
-  function hide(){ overlay.style.display = "none"; }
+function showHidden(){
+  overlay.style.display = "block";
+  overlay.style.visibility = "hidden";
+  overlay.style.opacity = "0";
+}
+function showVisible(){
+  overlay.style.display = "block";
+  overlay.style.visibility = "visible";
+  overlay.style.opacity = "1";
+}
+function hide(){
+  overlay.style.display = "none";
+  overlay.style.visibility = "hidden";
+  overlay.style.opacity = "0";
+}
+
 
   function ensureMeasureNode(){
-    let meas = document.getElementById("typeMeasure");
-    if (meas) return meas;
+  let meas = document.getElementById("typeMeasure");
+  if (meas) return meas;
 
-    meas = document.createElement("div");
-    meas.id = "typeMeasure";
-    meas.style.position = "fixed";
-    meas.style.left = "-99999px";
-    meas.style.top = "0";
-    meas.style.width = "calc(100vw - 48px)";
-    meas.style.padding = "24px";
-    meas.style.boxSizing = "border-box";
-    meas.style.fontFamily = "g1, sans-serif";
-    meas.style.fontWeight = "800";
-    meas.style.letterSpacing = "0.01em";
-    meas.style.lineHeight = "1.05";
-    meas.style.whiteSpace = "pre-wrap";
-    meas.style.wordBreak = "keep-all";
-    meas.style.overflowWrap = "normal";
-    meas.style.hyphens = "none";
-    meas.style.visibility = "hidden";
-    meas.style.pointerEvents = "none";
-    document.body.appendChild(meas);
-    return meas;
-  }
+  meas = document.createElement("div");
+  meas.id = "typeMeasure";
+  meas.style.position = "fixed";
+  meas.style.left = "-99999px";
+  meas.style.top = "0";
+  meas.style.padding = "0";
+  meas.style.margin = "0";
+  meas.style.boxSizing = "border-box";
+  meas.style.visibility = "hidden";
+  meas.style.pointerEvents = "none";
+
+  // ✅ MUSS exakt wie #typeText sein
+  meas.style.fontFamily = "g1, sans-serif";
+  meas.style.fontWeight = "800";
+  meas.style.letterSpacing = "0.01em";
+  meas.style.lineHeight = "1.05";
+
+  // ✅ wir messen Zeilenbreite ohne Umbruch
+  meas.style.whiteSpace = "nowrap";
+  meas.style.wordBreak = "keep-all";
+  meas.style.overflowWrap = "normal";
+  meas.style.hyphens = "none";
+
+  document.body.appendChild(meas);
+  return meas;
+}
+
 
   function measurePlannedHeight(lines){
     const meas = ensureMeasureNode();
@@ -819,74 +883,276 @@ window.addEventListener("pointerdown", () => { onAnyClickStackSound(); }, { pass
     return meas.scrollHeight;
   }
 
-  function planLineSizesToFit(text){
-    const linesRaw = String(text || "").split("\n");
-    const base = linesRaw.map(t => ({ text: t, sizePx: rand(LINE_MIN, LINE_MAX) }));
-
-    const maxH = window.innerHeight - 48;
-    let h = measurePlannedHeight(base);
-    if (h <= maxH) return base;
-
-    let scale = maxH / Math.max(1, h);
-    let scaled = base.map(ln => ({ text: ln.text, sizePx: Math.max(LINE_MIN, ln.sizePx * scale) }));
-
-    h = measurePlannedHeight(scaled);
-    if (h > maxH){
-      const over = h / maxH;
-      scaled = scaled.map(ln => ({ text: ln.text, sizePx: Math.max(LINE_MIN, ln.sizePx / over) }));
-    }
-    return scaled;
+function planLineSizesToFit(text){
+  function targetWidthPx(){
+    const w = col0?.clientWidth || col0?.getBoundingClientRect?.().width || 0;
+    return Math.max(240, Math.floor(w || (window.innerWidth - 48)));
   }
 
-  function startTyping(){
-    if (!fullText) return;
+  // TXT -> Absätze: jede nicht-leere Zeile wird Fließtext, Leerzeile trennt Absätze
+  function parseParagraphs(raw){
+    const lines = String(raw || "").split("\n");
+    const paras = [];
+    let buf = [];
+    for (const ln of lines){
+      const t = ln.trim();
+      if (!t){
+        if (buf.length){
+          paras.push(buf.join(" ").replace(/[ \t]{2,}/g, " ").trim());
+          buf = [];
+        }
+        continue;
+      }
+      buf.push(t);
+    }
+    if (buf.length) paras.push(buf.join(" ").replace(/[ \t]{2,}/g, " ").trim());
+    return paras.filter(Boolean);
+  }
 
-    plannedLines = planLineSizesToFit(fullText);
+  // ✅ Exaktes Fill-to-width per DOM-Messung (unsichtbar), NUR über Schriftgröße
+  function fitSizeExactDOM(str, seedSize, width){
+    const text = String(str || "").trim();
+    if (!text) return seedSize;
 
-    i = 0;
-    lineIndex = 0;
-    col0.innerHTML = "";
-    currentLineEl = null;
-    currentLineText = "";
+    const FILL = 1.01;       // kleiner Overfill gegen Rundung
+    const MIN_S = 4;     // kleiner möglich
+    const MAX_S = 420;   // größer möglich
 
-    show();
-    document.body.classList.add("reading");
-    window.dispatchEvent(new Event("typewriterstart"));
+    const tester = document.createElement("div");
+    tester.className = "typeLine";
+    tester.style.visibility = "hidden";
+    tester.style.pointerEvents = "none";
+    tester.style.position = "absolute";
+    tester.style.left = "0";
+    tester.style.top = "0";
+    tester.style.whiteSpace = "nowrap";
+    tester.style.display = "inline-block";
+    tester.style.width = "auto";
+    tester.textContent = text;
+    col0.appendChild(tester);
 
-    function createLineForIndex(idx){
-      const ln = plannedLines[idx] || { text:"", sizePx: LINE_MIN };
-      currentLineEl = document.createElement("div");
-      currentLineEl.className = "typeLine";
-      currentLineEl.style.fontSize = ln.sizePx + "px";
-      col0.appendChild(currentLineEl);
-      currentLineText = "";
+    const measureAt = (px) => {
+  tester.style.fontSize = px + "px";
+  // ✅ echte Textbreite (nowrap)
+  return Math.max(1, tester.scrollWidth || 1);
+};
+
+    // Startschätzung
+    const w0 = measureAt(seedSize);
+    let s = seedSize * (width / w0) * FILL;
+    s = Math.max(MIN_S, Math.min(MAX_S, s));
+
+    // Binary search Bereich
+    let lo = Math.max(MIN_S, s * 0.55);
+    let hi = Math.min(MAX_S, s * 1.55);
+
+    // Bereich einschließen
+    for (let k=0; k<10; k++){
+      const wLo = measureAt(lo);
+      const wHi = measureAt(hi);
+      if (wLo <= width && wHi >= width) break;
+      lo = Math.max(MIN_S, lo * 0.82);
+      hi = Math.min(MAX_S, hi * 1.22);
     }
 
-    createLineForIndex(0);
+    for (let it=0; it<18; it++){
+      const mid = (lo + hi) / 2;
+      const wm = measureAt(mid);
+      if (wm < width) lo = mid;
+      else hi = mid;
+    }
 
-    const step = () => {
-      const ch = fullText[i++];
+    col0.removeChild(tester);
+    return Math.max(MIN_S, Math.min(MAX_S, hi));
+  }
 
-      if (ch === "\n"){
-        lineIndex++;
-        createLineForIndex(lineIndex);
+function pickFillTarget(){
+  const r = Math.random();
+
+  // 92%: ultra-ultra lang => sehr klein
+  if (r < 0.92) return rand(0.997, 0.99985);
+
+  // 6%: mittel
+  if (r < 0.98) return rand(0.78, 0.90);
+
+  // 2%: ultra kurz => sehr groß
+  return rand(0.22, 0.40);
+}
+
+  // Umbruch-Messung mit fixer Referenzgröße, aber mit variierendem FillTarget
+  function breakIntoLinesWithVariation(paragraph, width){
+    const meas = ensureMeasureNode();
+    meas.style.whiteSpace = "nowrap";
+    const REF_SIZE = 22;
+
+    function measure(str){
+      meas.style.fontSize = REF_SIZE + "px";
+      meas.textContent = str || "";
+      return Math.max(1, meas.scrollWidth || meas.getBoundingClientRect().width || 1);
+    }
+
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    const out = [];
+    let cur = "";
+    let fillTarget = pickFillTarget();
+
+    for (const w of words){
+      const next = cur ? (cur + " " + w) : w;
+      const tw = measure(next);
+
+      // Zielbreite für diesen Zeilenlauf
+      const target = width * fillTarget;
+
+     // Nur brechen wenn Zeile wirklich fast voll ist
+if (cur && tw >= target){
+  out.push(cur);
+  cur = w;
+  fillTarget = pickFillTarget();
+} else if (cur && tw > width){
+        // harte Kante: darf nie über width
+        out.push(cur);
+        cur = w;
+        fillTarget = pickFillTarget();
       } else {
-        currentLineText += ch;
-        currentLineEl.textContent = currentLineText;
+        cur = next;
       }
-
-      if (i >= fullText.length){
-        clearTimeout(timer);
-        timer = null;
-        return;
-      }
-
-      timer = setTimeout(step, charDelay(ch));
-    };
-
-    clearTimeout(timer);
-    timer = setTimeout(step, rand(120, 240));
+    }
+    if (cur) out.push(cur);
+    return out;
   }
+
+  const width = targetWidthPx();
+  const paras = parseParagraphs(String(text || ""));
+
+  function seedForLine(){
+  const r = Math.random();
+
+  // meistens klein starten -> unterstützt kleinen Durchschnitt
+  if (r < 0.70) return rand(8, 22);
+
+  // manchmal sehr groß starten -> erlaubt riesige Ausreißer
+  return rand(60, 160);
+}
+
+  let planned = [];
+
+  for (let pi=0; pi<paras.length; pi++){
+    const lines = breakIntoLinesWithVariation(paras[pi], width);
+
+    let lineGroup = 0;
+let groupSeed = seedForLine();
+
+for (const ln of lines){
+
+  // spätestens alle 5 Zeilen neue "Größenphase"
+  if (lineGroup >= 5){
+    groupSeed = seedForLine();
+    lineGroup = 0;
+  }
+
+  const sizePx = fitSizeExactDOM(ln, groupSeed, width);
+  planned.push({ text: ln, sizePx });
+
+  lineGroup++;
+}
+
+    if (pi < paras.length - 1){
+      planned.push({ text:"", sizePx: 18 });
+    }
+  }
+
+  // Höhe fitten: global skalieren, danach NOCHMAL pro Zeile exakt auf Breite fitten (unsichtbar)
+  const maxH = window.innerHeight - 48;
+  let h = measurePlannedHeight(planned);
+  if (h <= maxH) return planned;
+
+  const k = maxH / Math.max(1, h);
+  planned = planned.map(ln => ln.text ? ({ ...ln, sizePx: Math.max(10, ln.sizePx * k) }) : ln);
+
+  // Refit auf Breite nach Skalierung, damit rechts wieder exakt sitzt
+  planned = planned.map(ln => {
+    if (!ln.text) return ln;
+    return { ...ln, sizePx: fitSizeExactDOM(ln.text, ln.sizePx, width) };
+  });
+
+  return planned;
+}
+
+
+async function startTyping(){
+  if (!fullText) return;
+
+  // ✅ Overlay layouten aber UNSICHTBAR
+  showHidden();
+
+  // ✅ auf Webfont warten
+  try{ if (document.fonts?.ready) await document.fonts.ready; }catch{}
+
+  // ✅ 2 Frames warten: Breiten stimmen dann wirklich
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  // ✅ JETZT planen (endgültige Größen!)
+  plannedLines = planLineSizesToFit(fullText);
+
+  lineIndex = 0;
+  i = 0;
+  col0.innerHTML = "";
+  currentLineEl = null;
+  currentLineText = "";
+
+  // ✅ erst jetzt sichtbar machen (keine sichtbare Anpassung)
+  showVisible();
+
+  document.body.classList.add("reading");
+  window.dispatchEvent(new Event("typewriterstart"));
+
+  function createLineForIndex(idx){
+    const ln = plannedLines[idx] || { text:"", sizePx: LINE_MIN };
+    currentLineEl = document.createElement("div");
+    currentLineEl.className = "typeLine";
+    currentLineEl.style.fontSize = ln.sizePx + "px";
+    currentLineEl.style.transform = "none";
+    col0.appendChild(currentLineEl);
+    currentLineText = "";
+    i = 0;
+  }
+
+  createLineForIndex(0);
+
+  const step = () => {
+    const ln = plannedLines[lineIndex] || { text:"" };
+    const lineStr = String(ln.text ?? "");
+
+    if (lineStr.length === 0){
+      currentLineEl.textContent = "";
+      lineIndex++;
+      if (lineIndex >= plannedLines.length){ clearTimeout(timer); timer=null; return; }
+      createLineForIndex(lineIndex);
+      timer = setTimeout(step, rand(120, 220));
+      return;
+    }
+
+    const ch = lineStr[i++];
+    if (ch != null){
+      currentLineText += ch;
+      currentLineEl.textContent = currentLineText;
+    }
+
+    if (i >= lineStr.length){
+      lineIndex++;
+      if (lineIndex >= plannedLines.length){ clearTimeout(timer); timer=null; return; }
+      createLineForIndex(lineIndex);
+      timer = setTimeout(step, rand(140, 260));
+      return;
+    }
+
+    timer = setTimeout(step, charDelay(ch));
+  };
+
+  clearTimeout(timer);
+  timer = setTimeout(step, rand(120, 240));
+}
+
 
   function stopTyping(){
     if (idleDelayTimer){ clearTimeout(idleDelayTimer); idleDelayTimer = null; }
@@ -1221,6 +1487,7 @@ let steerAngleP2 = 0;
 
 let raceState = "idle";
 let countdownEnd = 0;
+let countdownStart = 0;
 let lastCountdownText = "";
 
 const lastScore = { p1:null, p2:null };
@@ -1339,17 +1606,30 @@ function resetHud(){
 
 function beginCountdown(now){
   raceState = "countdown";
-  countdownEnd = now + 4000;
+
+  // ✅ Phasen-Dauern (ms)
+  const PRE_MS = 650;     // ampel.png ohne Zahl
+  const STEP_MS = 1000;   // 3,2,1 jeweils 1s
+  const GO_MS  = 520;     // GO sichtbar bevor Start
+
+  countdownStart = now;
+  countdownEnd = now + (PRE_MS + 3*STEP_MS + GO_MS);
+
   lastCountdownText = "";
+
   raceCountdownEl.style.display = "block";
   raceScoreEl.style.display = "none";
 
   playBeep();
 
-  raceCountdownEl.textContent = "3";
-  setTrafficLight("pre");
-  lastCountdownText = "3";
+  // Start: nur Grund-Ampel, keine Zahl
+  raceCountdownEl.textContent = "";
+  raceCountdownEl.style.fontSize = "96px";
+  setTrafficLight("pre");   // ampel.png
+  lastCountdownText = "pre";
 }
+
+
 
 function beginRace(){
   raceState = "running";
@@ -1385,7 +1665,17 @@ function closeTrack(){
   players.p1.keys.clear();
   players.p2.keys.clear();
 }
-trackOverlay.addEventListener("click",(e)=>{ if (e.target===trackOverlay) closeTrack(); });
+trackOverlay.addEventListener("pointerdown", (e) => {
+  // ✅ Track immer per Klick/tap schließen
+  // Ausnahme: Klick auf "Info-Karte" oder Fehlerbox (damit man Text markieren/lesen kann)
+  const box = e.target.closest?.('[data-trackbox="1"]');
+  if (box) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  closeTrack();
+}, { passive:false });
+
 
 function escapeHtml(s){
   return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
@@ -1519,7 +1809,7 @@ async function openTrackById(id){
 
     if (!pathIsClosed) {
       trackOverlay.insertAdjacentHTML("beforeend", `
-        <div style="position:fixed;left:20px;top:20px;padding:10px 12px;
+        <div data-trackbox="1" style="position:fixed;left:20px;top:20px;...
                     background:rgba(0,0,0,0.65);color:#fff;font:14px/1.4 system-ui;
                     border-radius:10px;max-width:70ch;z-index:999999;">
           <b>Hinweis:</b> Track-Pfad ist nicht geschlossen.<br/>
@@ -1556,7 +1846,7 @@ async function openTrackById(id){
   } catch(err){
     console.error(err);
     trackOverlay.innerHTML = `
-      <div style="position:fixed;left:20px;top:20px;padding:12px;
+      <div data-trackbox="1" style="position:fixed;left:20px;top:20px;...
                   background:rgba(0,0,0,0.75);color:#fff;font:14px/1.4 system-ui;
                   border-radius:10px;max-width:70ch;">
         <b>Track konnte nicht geladen werden.</b><br/>
@@ -1630,31 +1920,63 @@ function tick(t){
 
   if (!svg || !path || !length) { lastFrame = t; return; }
 
-  if (raceState==="countdown"){
-    const now = performance.now();
-    const msLeft = Math.max(0, countdownEnd - now);
-    const s = Math.ceil(msLeft / 1000);
+ if (raceState==="countdown"){
+  const now = performance.now();
 
-    let txt = "";
-    if (s >= 4) txt = "3";
-    else if (s === 3) txt = "2";
-    else if (s === 2) txt = "1";
-    else txt = "GO";
+  const PRE_MS = 650;
+  const STEP_MS = 1000;
+  const GO_MS  = 520;
 
-    if (txt !== lastCountdownText){
-      lastCountdownText = txt;
-      raceCountdownEl.textContent = txt;
+  const elapsed = Math.max(0, now - countdownStart);
+  const total = PRE_MS + 3*STEP_MS + GO_MS;
 
-      if (s >= 4) setTrafficLight("pre");
-      else if (s === 3) setTrafficLight(1);
-      else if (s === 2) setTrafficLight(2);
-      else setTrafficLight(3);
+  let phase = "";
+  if (elapsed < PRE_MS) phase = "pre";
+  else if (elapsed < PRE_MS + 1*STEP_MS) phase = "3";
+  else if (elapsed < PRE_MS + 2*STEP_MS) phase = "2";
+  else if (elapsed < PRE_MS + 3*STEP_MS) phase = "1";
+  else if (elapsed < total) phase = "GO";
+  else phase = "DONE";
+
+  if (phase !== lastCountdownText){
+    lastCountdownText = phase;
+
+    if (phase === "pre"){
+      raceCountdownEl.textContent = "";
+      raceCountdownEl.style.fontSize = "96px";
+      setTrafficLight("pre");     // ampel.png
     }
-
-    if (now >= countdownEnd) beginRace();
-    lastFrame = t;
-    return;
+    else if (phase === "3"){
+      raceCountdownEl.textContent = "3";
+      raceCountdownEl.style.fontSize = "96px";
+      setTrafficLight(1);         // ampel1.png
+    }
+    else if (phase === "2"){
+      raceCountdownEl.textContent = "2";
+      raceCountdownEl.style.fontSize = "96px";
+      setTrafficLight(2);         // ampel2.png
+    }
+    else if (phase === "1"){
+      raceCountdownEl.textContent = "1";
+      raceCountdownEl.style.fontSize = "96px";
+      setTrafficLight(3);         // ampel3.png
+    }
+    else if (phase === "GO"){
+      // ✅ GO groß, nur Text
+      raceCountdownEl.textContent = "GO";
+      raceCountdownEl.style.fontSize = "160px";
+      hideTrafficLight();
+    }
   }
+
+  if (phase === "DONE"){
+    beginRace();
+  }
+
+  lastFrame = t;
+  return;
+}
+
 
   if (raceState!=="running"){ lastFrame = t; return; }
 
@@ -1776,6 +2098,7 @@ window.addEventListener("load", () => setBlackPreview("A1"));
     rain:   ["images/regen/regen1.png", "images/regen/regen2.png", "images/regen/regen3.png"],
     snow:   ["images/schnee1.png", "images/schnee2.png"],
     sun:    ["images/sonne1.png"],
+    rainbow: ["images/regenbogen1.png"],
     clouds: ["images/wolke1.png","images/wolke2.png","images/wolke3.png","images/wolke4.png","images/wolke5.png"],
 
     /* ✅ Artefakt-Regen: bei dir images/onlyartefakte/arte1.png ... arte100.png */
@@ -1790,6 +2113,7 @@ window.addEventListener("load", () => setBlackPreview("A1"));
     rain:   loadImages(ASSETS.rain),
     snow:   loadImages(ASSETS.snow),
     sun:    loadImages(ASSETS.sun),
+    rainbow: loadImages(ASSETS.rainbow),
     clouds: loadImages(ASSETS.clouds),
     arte:   loadImages(ASSETS.arte),
   };
@@ -2133,6 +2457,32 @@ window.addEventListener("load", () => setBlackPreview("A1"));
     };
   }
 
+      function drawRainbow(alpha){
+    const im = IMG.rainbow?.[0];
+    if (!im || !im.complete || !im.naturalWidth) return;
+    if (alpha <= 0.001) return;
+
+    // Größer als Bildschirm → geht über Rand hinaus
+    const targetW = Math.max(W * 1.25, 1400);
+    const scale = targetW / im.naturalWidth;
+    const w = im.naturalWidth * scale;
+    const h = im.naturalHeight * scale;
+
+    // Horizontal zentriert
+    const x = (W - w) / 2;
+
+    // Weiter nach unten → unterer Bildschirmbereich
+    // (großer Teil liegt unterhalb des Screens → wirkt wie echter Horizontbogen)
+    const y = H - h * 0.55;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(im, x, y, w, h);
+    ctx.restore();
+
+  }
+
+
   const ENGINES = {
     rain: makeRain(),
     snow: makeSnow(),
@@ -2281,23 +2631,35 @@ window.addEventListener("load", () => setBlackPreview("A1"));
 
     ctx.clearRect(0,0,W,H);
 
-    const sunAlpha = skyCloudsOn ? 0.38 : 1.0;
-    if (skySunOn) ENGINES.sun.draw?.(sunAlpha);
-    if (skyCloudsOn) ENGINES.clouds.draw?.(1);
+       const sunAlpha = skyCloudsOn ? 0.38 : 1.0;
 
-    if (precipFading){
-      precipT = Math.min(1, precipT + dt / Math.max(0.001, precipDur));
-      const e = easeInOut(precipT);
-      const aNext = e;
-      const aCurr = 1 - e;
+// Sonne zuerst
+if (skySunOn) ENGINES.sun.draw?.(sunAlpha);
 
-      if (precipCurr !== "none") ENGINES[precipCurr].draw?.(aCurr);
-      if (precipNext !== "none") ENGINES[precipNext].draw?.(aNext);
+// --- Regenbogen: Sonne + Regen gleichzeitig ---
+// Regen-Sichtbarkeit bestimmen (auch während Fade)
+let rainAlpha = 0;
 
-      if (precipT >= 1) commitPrecip();
-    } else {
-      if (precipCurr !== "none") ENGINES[precipCurr].draw?.(1);
-    }
+if (precipFading){
+  // (precipT / aNext / aCurr werden weiter unten in deinem Fade-Block berechnet)
+  // → wir setzen rainAlpha später, sobald aCurr/aNext existieren
+} else {
+  if (precipCurr === "rain") rainAlpha = 1;
+}
+
+// Regenbogen VOR Wolken zeichnen (damit er dahinter liegt)
+if (skySunOn && rainAlpha > 0.02){
+  drawRainbow(Math.min(1, rainAlpha) * 0.85);
+}
+
+// Wolken danach
+if (skyCloudsOn) ENGINES.clouds.draw?.(1);
+
+if (precipCurr === "rain") rainAlpha += aCurr;
+if (precipNext === "rain") rainAlpha += aNext;
+
+
+
   }
 
   window.addEventListener("idleenter", () => {
