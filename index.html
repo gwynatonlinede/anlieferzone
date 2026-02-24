@@ -652,6 +652,8 @@ const masterAmbient = (() => {
    ========================= */
 const VEHICLE_SOUNDS = [
   "audio/motor1.wav",
+  "audio/motor2.wav",
+  "audio/motor3.wav",
   "audio/motorrad1.wav",
   "audio/lkw1.wav",
   "audio/lkw2.wav",
@@ -666,10 +668,64 @@ const VEHICLE_SOUNDS = [
   "audio/wash4.wav",
   "audio/circles.wav",
   "audio/klang1.wav",
+  "audio/formel1.wav",
+  "audio/formel2.wav",
 ];
 
 let vehicleStack = [];
 let weatherAudio = null;
+
+/* =========================
+   SUN AUDIO (sanftes Fade)
+   ========================= */
+let sunAudio = null;
+let sunTarget = 0;     // 0..1
+let sunGain = 0;
+let sunFading = false;
+
+const SUN_SOUNDS = [
+  "audio/sonne1.wav",
+  "audio/sonne2.wav"
+];
+
+function startSunAudio(){
+  if (sunAudio) return;
+
+  const src = pick(SUN_SOUNDS);
+  sunAudio = new Audio(src);
+  sunAudio.loop = true;
+  sunAudio.preload = "auto";
+  sunAudio.volume = 0;
+  sunAudio.play().catch(()=>{});
+
+  sunTarget = 0.85;   // Ziel-Lautstärke
+  sunFading = true;
+}
+
+function stopSunAudio(){
+  if (!sunAudio) return;
+  sunTarget = 0;
+  sunFading = true;
+}
+
+function updateSunAudio(dt){
+  if (!sunFading || !sunAudio) return;
+
+  // weiches exponentielles Fade
+  sunGain += (sunTarget - sunGain) * (1 - Math.exp(-2.2 * dt));
+  sunAudio.volume = Math.max(0, Math.min(1, sunGain));
+
+  if (sunTarget === 0 && sunGain < 0.01){
+    try{ sunAudio.pause(); }catch{}
+    sunAudio = null;
+    sunGain = 0;
+    sunFading = false;
+  }
+
+  if (Math.abs(sunTarget - sunGain) < 0.002){
+    sunFading = false;
+  }
+}
 
 function playLoop(src, volume=1.0){
   const a = new Audio(src);
@@ -1029,18 +1085,35 @@ function pickFillTarget(){
     return Math.max(1, meas.scrollWidth || meas.getBoundingClientRect().width || 1);
   }
 
-  const GROUP_MAX = 5;
+  // ✅ Gruppenlänge variabel, damit nicht “5er-Rhythmus” entsteht
+function pickGroupMax(){
+  // 55%: 1 Zeile, 30%: 2, 12%: 3, 3%: 4
+  const r = Math.random();
+  if (r < 0.55) return 1;
+  if (r < 0.85) return 2;
+  if (r < 0.97) return 3;
+  return 4;
+}
+let GROUP_MAX = pickGroupMax();
 
 function pickMode(prev){
   const r = Math.random();
-  let m = (r < 0.99) ? "TINY" : "HUGE";   // 90% tiny → durchschnittlich kleiner
-  if (m === prev) m = (m === "TINY") ? "HUGE" : "TINY";
+
+  // ✅ mehr MID, weniger TINY, HUGE bleibt selten
+  // 65% TINY, 33% MID, 2% HUGE
+  let m = (r < 0.65) ? "TINY" : (r < 0.98) ? "MID" : "HUGE";
+
+  // optional: nicht 6x dasselbe am Stück (verhindert Muster)
+  if (prev && m === prev && Math.random() < 0.35){
+    m = (m === "TINY") ? "MID" : "TINY";
+  }
   return m;
 }
 
 function pickFillTargetForMode(mode){
-  if (mode === "TINY") return rand(0.9, 0.98); // länger → kleiner
-  return rand(0.18, 0.25);                       // huge bleibt riesig, aber seltener
+  if (mode === "TINY") return rand(0.94, 0.985);  // lang → eher klein
+  if (mode === "MID")  return rand(0.72, 0.88);   // ✅ “normaler” Textfluss
+  return rand(0.10, 0.18);                        // huge ultrakurz
 }
 
   const words = paragraph.split(/\s+/).filter(Boolean);
@@ -1053,11 +1126,14 @@ function pickFillTargetForMode(mode){
   let fillTarget = pickFillTargetForMode(mode);
 
   function startNewGroup(){
-    prevMode = mode;
-    mode = pickMode(prevMode);
-    remainingInGroup = GROUP_MAX;
-    fillTarget = pickFillTargetForMode(mode);
-  }
+  prevMode = mode;
+  mode = pickMode(prevMode);
+
+  GROUP_MAX = pickGroupMax();
+  remainingInGroup = GROUP_MAX;
+
+  fillTarget = pickFillTargetForMode(mode);
+}
 
   for (const w of words){
     const next = cur ? (cur + " " + w) : w;
@@ -1106,45 +1182,74 @@ function pickFillTargetForMode(mode){
   function seedForLine(){
   const r = Math.random();
 
-  if (r < 0.85) return rand(8, 20);     // öfter klein
-  return rand(50, 110);                 // große Seeds deutlich reduziert
+ if (r < 0.965) return rand(6, 18);
+return rand(80, 150);
+
+  // ✅ selten: ein größerer Seed (führt zu großen Zeilen, aber extrem selten)
+  return rand(90, 160);
 }
 
 let planned = [];
 
-// "mittelgroß" definieren (hier kannst du später feinjustieren)
-const MID_MIN = 18;
-const MID_MAX = 160;
+// ✅ "mittelgroß" (Feinjustierung)
+const MID_MIN = 20;
+const MID_MAX = 84;
+
+// ✅ "klein" definieren (alles darunter zählt als klein-lastig)
+const SMALL_MAX = 18;
+
+// Runs
 let midRun = 0;
+let smallRun = 0;
 
 for (let pi=0; pi<paras.length; pi++){
   const lines = breakIntoLinesWithVariation(paras[pi], width);
 
-  let lineGroup = 0;
-  let groupSeed = seedForLine();
+ let lineGroup = 0;
+let lineGroupMax = null; // ✅ variable Gruppengröße
+let groupSeed = seedForLine();
 
   for (const ln of lines){
 
-    // spätestens alle 5 Zeilen neue "Größenphase"
-    if (lineGroup >= 5){
-      groupSeed = seedForLine();
-      lineGroup = 0;
-    }
+    // ✅ Seed-Phase variabel (1–4 Zeilen), sonst entsteht wieder ein “Takt”
+if (lineGroupMax == null) lineGroupMax = ((Math.random() < 0.55) ? 1 : (Math.random() < 0.80) ? 2 : (Math.random() < 0.95) ? 3 : 4);
 
-    // ---- Begrenzung: max. 5 mittelgroße Zeilen nacheinander ----
-    // Wenn wir schon 5 "MIDs" hatten, zwingen wir ein Extrem:
+if (lineGroup >= lineGroupMax){
+  groupSeed = seedForLine();
+  lineGroup = 0;
+  lineGroupMax = null;
+}
+
+    // ---- Begrenzung: max. 4 mittelgroße Zeilen nacheinander ----
+    // Wenn wir schon 4 "MIDs" hatten, zwingen wir ein Extrem:
     // - 90%: TINY (klein) → hilft dir zusätzlich "mehr Text auf weniger Fläche"
     // - 10%: HUGE (sehr groß) → bleibt als gelegentlicher Ausreißer erhalten
     let localSeed = groupSeed;
-    if (midRun >= 5){
-      localSeed = (Math.random() < 0.90) ? rand(7, 14) : rand(140, 220);
-    }
+   if (midRun >= 3){
+  // ✅ nach 3 MIDs: meistens klein, aber öfter wieder MID möglich
+  // 72% klein, 26% wieder MID, 2% huge Ausreißer
+  const r = Math.random();
+  if (r < 0.72) localSeed = rand(6, 12);
+  else if (r < 0.98) localSeed = rand(16, 34);   // MID-Seed
+  else localSeed = rand(110, 170);               // selten huge
+}
 
     const sizePx = fitSizeExactDOM(ln, localSeed, width);
     planned.push({ text: ln, sizePx });
 
     const isMid = (sizePx >= MID_MIN && sizePx <= MID_MAX);
-    midRun = isMid ? (midRun + 1) : 0;
+const isSmall = (sizePx <= SMALL_MAX);
+
+midRun = isMid ? (midRun + 1) : 0;
+smallRun = isSmall ? (smallRun + 1) : 0;
+
+// ✅ wenn zu viele kleine hintereinander: nächste Zeile Richtung MID schieben
+if (smallRun >= 6){
+  // beim nächsten Durchlauf den Seed anheben → eher MID
+  groupSeed = rand(18, 42);
+  lineGroup = 999; // triggert sofort Seed-Neuwahl bei deinem group-Mechanismus
+  smallRun = 0;
+}
 
     lineGroup++;
   }
@@ -2284,6 +2389,7 @@ window.addEventListener("load", () => setBlackPreview("A1"));
     WX.wind = !!on;
     WX.cloudSpeedMult = WX.wind ? 2.0 : 1.0;
   }
+
 function makeRain(){
   const drops = [];
 
@@ -2373,7 +2479,13 @@ function makeRain(){
         ctx.restore();
       }
     }
+    ,
+isVisible(){
+  // "sichtbar" sobald eine kleine Menge wirklich spawnt
+  return intensity > 0.10 && drops.length > 6;
+}
   };
+  
 }
 function makeArteRain(){
   const drops = [];
@@ -2676,11 +2788,19 @@ function makeArteRain(){
   });
 
   function updateWeatherAudio(){
-    if (WX.wind){ playWeather("audio/wind1.wav"); return; }
-    const rainActive = (precipCurr === "rain") || (precipNext === "rain");
-    if (rainActive){ playWeather("audio/regen1.wav"); return; }
-    stopWeather();
+  if (WX.wind){
+    playWeather("audio/wind1.wav");
+    return;
   }
+
+  // Regen-Sound NUR wenn Regen wirklich sichtbar ist
+  if (precipCurr === "rain" && ENGINES.rain?.isVisible?.()){
+    playWeather("audio/regen1.wav");
+    return;
+  }
+
+  stopWeather();
+}
 
   let running = false;
   let tSec = 0;
@@ -2727,10 +2847,8 @@ function makeArteRain(){
     running = true;
 
     /* ✅ auch arte kann initial sein */
-    const initR = Math.random();
-    precipCurr = initR < 0.45 ? "rain" : initR < 0.80 ? "snow" : "arte";
-    precipNext = precipCurr;
-    precipT = 1;
+const initR = Math.random();
+precipCurr = initR < 0.45 ? "rain" : initR < 0.80 ? "snow" : "arte";
 
     setWind(Math.random() < 0.25);
     toggleSkyRandom();
@@ -2749,12 +2867,9 @@ function makeArteRain(){
     cloudsForceDense = false;
     skySunOn = false;
     skyCloudsOn = false;
-    precipCurr = "none";
-    precipNext = null;
-    precipFading = false;
-    precipT = 1;
-    lastMs = null;
-    ctx.clearRect(0,0,W,H);
+   precipCurr = "none";
+  lastMs = null;
+  ctx.clearRect(0,0,W,H);
   }
 
   function setPrecip(type){
@@ -2784,6 +2899,18 @@ function makeArteRain(){
     lastMs = ms;
     tSec += dt;
 
+    // --- Sun Audio nur wenn NUR Sonne da ist ---
+const onlySun =
+  skySunOn &&
+  !skyCloudsOn &&
+  (precipCurr === "none") &&
+  !WX.wind;
+
+if (onlySun) startSunAudio();
+else stopSunAudio();
+
+updateSunAudio(dt);
+
     if (tSec >= nextSwitchAt){
       setWind(Math.random() < 0.25);
       toggleSkyRandom();
@@ -2800,7 +2927,6 @@ function makeArteRain(){
     if (skyCloudsOn) ENGINES.clouds.update?.(dt * gustBoost, tSec);
 
     if (precipCurr !== "none") ENGINES[precipCurr].update?.(dt, tSec);
-    if (precipNext && precipNext !== "none") ENGINES[precipNext].update?.(dt, tSec);
 
    ctx.clearRect(0,0,W,H);
 
