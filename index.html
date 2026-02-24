@@ -24,7 +24,6 @@
   font-family: "g1", sans-serif;
 }
 
-
   /* ===== GRID ===== */
   .grid{
     display:grid;
@@ -64,7 +63,6 @@
   display:block;
   pointer-events:auto; /* damit klicken geht */
 }
-
 
   /* ===== TRACK OVERLAY ===== */
   #trackOverlay{
@@ -133,7 +131,6 @@
   margin:0;
   display:none;
 }
-
 
   /* ===== PLAYERS ===== */
   .player{
@@ -416,7 +413,6 @@
   width:100%;
 }
 
-
   #typeOverlay{
     position:fixed;
     inset:0;
@@ -455,7 +451,6 @@
   hyphens: none;
   line-height: 1.05;
 }
-
 
   /* Idle soll NICHT den Hintergrund ändern */
   body.idle{ }
@@ -594,6 +589,38 @@ const TUNE = {
    ========================= */
 function rand(a,b){ return a + Math.random()*(b-a); }
 function pick(arr){ return arr[(Math.random()*arr.length)|0]; }
+
+/* =========================
+   GRID DRIFT (pro Kachel, wie früher)
+   ========================= */
+(() => {
+  const gridEl = document.getElementById("grid");
+  if (!gridEl) return;
+
+  function applyDrift(){
+    const cells = Array.from(gridEl.querySelectorAll(".cell"));
+    for (const cell of cells){
+      const x = rand(-TUNE.driftRange, TUNE.driftRange);
+      const y = rand(-TUNE.driftRange, TUNE.driftRange);
+      const r = rand(-TUNE.driftRotate, TUNE.driftRotate);
+
+      cell.style.transition = `transform ${TUNE.driftDuration}ms ease`;
+      cell.style.transform  = `translate(${x}px, ${y}px) rotate(${r}deg)`;
+    }
+  }
+
+  function resetDrift(){
+    const cells = Array.from(gridEl.querySelectorAll(".cell"));
+    for (const cell of cells){
+      cell.style.transition = `transform ${TUNE.driftReset}ms ease`;
+      cell.style.transform  = `translate(0px, 0px) rotate(0deg)`;
+    }
+  }
+
+  window.addEventListener("typewriterstart", applyDrift);
+  window.addEventListener("typewriterstop", resetDrift);
+  window.addEventListener("idleleave", resetDrift);
+})();
 
 /* =========================
    MASTER AMBIENT 172.wav
@@ -812,8 +839,6 @@ function normalizeTypingText(txt){
   return txt.trim();
 }
 
-
-
   function pickNextTextFile(){
     if (!TEXT_FILES.length) return null;
     let idx = (Math.random() * TEXT_FILES.length) | 0;
@@ -847,7 +872,6 @@ function hide(){
   overlay.style.visibility = "hidden";
   overlay.style.opacity = "0";
 }
-
 
   function ensureMeasureNode(){
   let meas = document.getElementById("typeMeasure");
@@ -994,9 +1018,10 @@ function pickFillTarget(){
   const meas = ensureMeasureNode();
   meas.style.whiteSpace = "nowrap";
 
+  //ZEILEN//
   // ✅ kleiner = beim Planen passen mehr Wörter in eine Zeile
   // (wichtig für "viele kleine Zeilen")
-  const REF_SIZE = 20;
+  const REF_SIZE = 16;
 
   function measure(str){
     meas.style.fontSize = REF_SIZE + "px";
@@ -1006,19 +1031,17 @@ function pickFillTarget(){
 
   const GROUP_MAX = 5;
 
-  // ✅ Modi definieren: TINY = ultralang, HUGE = ultrakurz
-  // TINY häufiger, weil du "mehr kleine Extreme" willst.
-  function pickMode(prev){
-    const r = Math.random();
-    let m = (r < 0.75) ? "TINY" : "HUGE";   // 75% tiny, 25% huge
-    if (m === prev) m = (m === "TINY") ? "HUGE" : "TINY"; // nicht zweimal hintereinander
-    return m;
-  }
+function pickMode(prev){
+  const r = Math.random();
+  let m = (r < 0.99) ? "TINY" : "HUGE";   // 90% tiny → durchschnittlich kleiner
+  if (m === prev) m = (m === "TINY") ? "HUGE" : "TINY";
+  return m;
+}
 
-  function pickFillTargetForMode(mode){
-    if (mode === "TINY") return rand(0.996, 0.99985); // extrem lang -> sehr klein
-    return rand(0.18, 0.40);                          // extrem kurz -> sehr groß
-  }
+function pickFillTargetForMode(mode){
+  if (mode === "TINY") return rand(0.9, 0.98); // länger → kleiner
+  return rand(0.18, 0.25);                       // huge bleibt riesig, aber seltener
+}
 
   const words = paragraph.split(/\s+/).filter(Boolean);
   const out = [];
@@ -1083,39 +1106,54 @@ function pickFillTarget(){
   function seedForLine(){
   const r = Math.random();
 
-  // meistens klein starten -> unterstützt kleinen Durchschnitt
-  if (r < 0.70) return rand(8, 22);
-
-  // manchmal sehr groß starten -> erlaubt riesige Ausreißer
-  return rand(60, 160);
+  if (r < 0.85) return rand(8, 20);     // öfter klein
+  return rand(50, 110);                 // große Seeds deutlich reduziert
 }
 
-  let planned = [];
+let planned = [];
 
-  for (let pi=0; pi<paras.length; pi++){
-    const lines = breakIntoLinesWithVariation(paras[pi], width);
+// "mittelgroß" definieren (hier kannst du später feinjustieren)
+const MID_MIN = 18;
+const MID_MAX = 160;
+let midRun = 0;
 
-    let lineGroup = 0;
-let groupSeed = seedForLine();
+for (let pi=0; pi<paras.length; pi++){
+  const lines = breakIntoLinesWithVariation(paras[pi], width);
 
-for (const ln of lines){
+  let lineGroup = 0;
+  let groupSeed = seedForLine();
 
-  // spätestens alle 5 Zeilen neue "Größenphase"
-  if (lineGroup >= 5){
-    groupSeed = seedForLine();
-    lineGroup = 0;
-  }
+  for (const ln of lines){
 
-  const sizePx = fitSizeExactDOM(ln, groupSeed, width);
-  planned.push({ text: ln, sizePx });
-
-  lineGroup++;
-}
-
-    if (pi < paras.length - 1){
-      planned.push({ text:"", sizePx: 18 });
+    // spätestens alle 5 Zeilen neue "Größenphase"
+    if (lineGroup >= 5){
+      groupSeed = seedForLine();
+      lineGroup = 0;
     }
+
+    // ---- Begrenzung: max. 5 mittelgroße Zeilen nacheinander ----
+    // Wenn wir schon 5 "MIDs" hatten, zwingen wir ein Extrem:
+    // - 90%: TINY (klein) → hilft dir zusätzlich "mehr Text auf weniger Fläche"
+    // - 10%: HUGE (sehr groß) → bleibt als gelegentlicher Ausreißer erhalten
+    let localSeed = groupSeed;
+    if (midRun >= 5){
+      localSeed = (Math.random() < 0.90) ? rand(7, 14) : rand(140, 220);
+    }
+
+    const sizePx = fitSizeExactDOM(ln, localSeed, width);
+    planned.push({ text: ln, sizePx });
+
+    const isMid = (sizePx >= MID_MIN && sizePx <= MID_MAX);
+    midRun = isMid ? (midRun + 1) : 0;
+
+    lineGroup++;
   }
+
+  if (pi < paras.length - 1){
+    planned.push({ text:"", sizePx: 18 });
+    midRun = 0; // Absatz trennt: Mid-Run resetten
+  }
+}
 
 
 // =========================
@@ -1286,6 +1324,7 @@ currentLineEl.style.lineHeight = lh.toFixed(3);
    ========================= */
 const letters = "ABCDEFGHIJ".split("");
 const N = 100;
+const grid = document.getElementById("grid");
 
 function idFromIndex(i){
   const r = Math.floor(i / 10) + 1;
@@ -1585,22 +1624,11 @@ let lastCountdownText = "";
 const lastScore = { p1:null, p2:null };
 function fmt(sec){ return (typeof sec==="number" ? sec.toFixed(3)+" s" : "—"); }
 
-
 /* ===== Session Driven Tracks ===== */
 const drivenTracks = new Set();
 
 /* ===== SCORE STORAGE (per Track) ===== */
 const SCORE_KEY = "anlieferzone_scores_v1";
-
-function loadScoreDB(){
-  try{
-    const raw = localStorage.getItem(SCORE_KEY);
-    const db = raw ? JSON.parse(raw) : {};
-    return (db && typeof db === "object") ? db : {};
-  }catch{
-    return {};
-  }
-}
 
 function loadScoreDB(){
   try{
@@ -1734,8 +1762,6 @@ function beginCountdown(now){
   setTrafficLight("pre");   // ampel.png
   lastCountdownText = "pre";
 }
-
-
 
 function beginRace(){
   raceState = "running";
@@ -2086,7 +2112,6 @@ function tick(t){
   return;
 }
 
-
   if (raceState!=="running"){ lastFrame = t; return; }
 
   if (lastFrame==null){ lastFrame=t; return; }
@@ -2259,206 +2284,248 @@ window.addEventListener("load", () => setBlackPreview("A1"));
     WX.wind = !!on;
     WX.cloudSpeedMult = WX.wind ? 2.0 : 1.0;
   }
+function makeRain(){
+  const drops = [];
 
-  function makeRain(){
-    const drops = [];
-    const cfg = { count: 280, grav: 820, stretch: 1.08 };
+  // Basis-Setup
+  const cfg = { baseCount: 280, grav: 820, stretch: 1.08 };
 
-    let angleDeg = 0;
-    let windX = 0;
-    let angleHold = 0;
+  // Intensity-Ramp (0..1) → steuert nur Spawnmenge, keine Transparenz
+  let intensity = 0;
+  let targetIntensity = 0;
+  const RAMP_RATE = 0.55; // höher = schneller Start/Stop
 
-    function pickNewAngle(){
-      const range = WX.wind ? WX.rainAngleRangeWind : WX.rainAngleRange;
-      angleDeg = rand(-range, range);
-      windX = -Math.tan(angleDeg * Math.PI/180) * WX.rainWindBase;
-      angleHold = WX.wind ? rand(3.5, 9.0) : rand(6, 16);
-    }
+  let angleDeg = 0;
+  let windX = 0;
+  let angleHold = 0;
 
-    function spawn(){
-      const img = pick(IMG.rain);
-      const scale = (img === IMG.rain[0]) ? rand(0.035,0.070)
-                  : (img === IMG.rain[1]) ? rand(0.045,0.090)
-                  :                        rand(0.055,0.110);
-
-      drops.push({ img, x: rand(-120, W+120), y: rand(-H, 0), vy: rand(520, 1150), scale });
-    }
-
-    function ensure(){
-      while (drops.length < cfg.count) spawn();
-      while (drops.length > cfg.count) drops.pop();
-    }
-
-    return {
-      start(){ drops.length = 0; pickNewAngle(); ensure(); },
-      update(dt){
-        ensure();
-        angleHold -= dt;
-        if (angleHold <= 0) pickNewAngle();
-
-        for (let i=drops.length-1; i>=0; i--){
-          const d = drops[i];
-          d.vy += cfg.grav * dt;
-          d.x  += windX * dt;
-          d.y  += d.vy * dt;
-          if (d.y > H + 200 || d.x < -260 || d.x > W + 260){
-            drops.splice(i,1); spawn();
-          }
-        }
-      },
-      draw(alpha){
-        if (alpha <= 0.001) return;
-        ctx.save();
-        ctx.globalAlpha = alpha;
-
-        for (const d of drops){
-          const im = d.img;
-          if (!im.complete || !im.naturalWidth) continue;
-
-          const w = im.naturalWidth  * d.scale;
-          const h = im.naturalHeight * d.scale * cfg.stretch;
-
-          ctx.save();
-          ctx.translate(d.x, d.y);
-          ctx.rotate(angleDeg * Math.PI/180);
-          ctx.drawImage(im, -w/2, -h/2, w, h);
-          ctx.restore();
-        }
-        ctx.restore();
-      }
-    };
+  function pickNewAngle(){
+    const range = WX.wind ? WX.rainAngleRangeWind : WX.rainAngleRange;
+    angleDeg = rand(-range, range);
+    windX = -Math.tan(angleDeg * Math.PI/180) * WX.rainWindBase;
+    angleHold = WX.wind ? rand(3.5, 9.0) : rand(6, 16);
   }
 
-  function makeArteRain(){
-    const drops = [];
-    const cfg = { count: 50, grav: 50 };
+  function spawn(){
+    const img = pick(IMG.rain);
+    const scale = (img === IMG.rain[0]) ? rand(0.035,0.070)
+                : (img === IMG.rain[1]) ? rand(0.045,0.090)
+                :                        rand(0.055,0.110);
 
-    function spawn(){
-      if (!IMG.arte || !IMG.arte.length) return;
-
-      const img = pick(IMG.arte);
-      const scale = rand(0.07, 0.10);
-
-      drops.push({
-        img,
-        x: rand(-120, W+120),
-        y: rand(-H, 0),
-        vy: rand(420, 820),
-        scale,
-        rot: rand(0, TAU),
-        spin: rand(-1.2, 1.2),
-      });
-    }
-
-    function ensure(){
-      while (drops.length < cfg.count) spawn();
-      while (drops.length > cfg.count) drops.pop();
-    }
-
-    return {
-      start(){ drops.length = 0; ensure(); },
-      update(dt){
-        ensure();
-        for (let i=drops.length-1; i>=0; i--){
-          const d = drops[i];
-          d.vy += cfg.grav * dt;
-          d.y  += d.vy * dt;
-          d.rot += d.spin * dt;
-
-          if (d.y > H + 200){
-            drops.splice(i,1);
-            spawn();
-          }
-        }
-      },
-      draw(alpha){
-        if (alpha <= 0.001) return;
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        for (const d of drops){
-          const im = d.img;
-          if (!im.complete || !im.naturalWidth) continue;
-          const w = im.naturalWidth  * d.scale;
-          const h = im.naturalHeight * d.scale;
-
-          ctx.save();
-          ctx.translate(d.x, d.y);
-          ctx.rotate(d.rot);
-          ctx.drawImage(im, -w/2, -h/2, w, h);
-          ctx.restore();
-        }
-        ctx.restore();
-      }
-    };
+    drops.push({ img, x: rand(-120, W+120), y: rand(-H, 0), vy: rand(520, 1150), scale });
   }
 
+  // ✅ nur nach oben auffüllen. Beim Runterfahren NICHT löschen → läuft natürlich aus.
+  function ensureTargetCount(){
+    const targetCount = Math.round(cfg.baseCount * intensity);
+    while (drops.length < targetCount) spawn();
+  }
+
+  function setIntensity(v){
+    targetIntensity = Math.max(0, Math.min(1, v));
+    // wenn Start aus 0 → sauberer Beginn
+    if (targetIntensity > 0 && drops.length === 0) pickNewAngle();
+  }
+
+  return {
+    start(){
+      drops.length = 0;
+      intensity = 0;
+      targetIntensity = 0;
+      pickNewAngle();
+    },
+    setIntensity,
+    update(dt){
+      // intensity rampen (exponentiell smooth)
+      intensity += (targetIntensity - intensity) * (1 - Math.exp(-RAMP_RATE * dt));
+
+      ensureTargetCount();
+
+      angleHold -= dt;
+      if (angleHold <= 0) pickNewAngle();
+
+      for (let i=drops.length-1; i>=0; i--){
+        const d = drops[i];
+        d.vy += cfg.grav * dt;
+        d.x  += windX * dt;
+        d.y  += d.vy * dt;
+        if (d.y > H + 200 || d.x < -260 || d.x > W + 260){
+          drops.splice(i,1);
+          // ✅ nur respawnen wenn wir “noch brauchen”
+          const targetCount = Math.round(cfg.baseCount * intensity);
+          if (drops.length < targetCount) spawn();
+        }
+      }
+    },
+    draw(){
+      // ✅ keine Transparenz-Fades hier
+      for (const d of drops){
+        const im = d.img;
+        if (!im.complete || !im.naturalWidth) continue;
+
+        const w = im.naturalWidth  * d.scale;
+        const h = im.naturalHeight * d.scale * cfg.stretch;
+
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        ctx.rotate(angleDeg * Math.PI/180);
+        ctx.drawImage(im, -w/2, -h/2, w, h);
+        ctx.restore();
+      }
+    }
+  };
+}
+function makeArteRain(){
+  const drops = [];
+  const cfg = { baseCount: 50, grav: 50 };
+
+  let intensity = 0;
+  let targetIntensity = 0;
+  const RAMP_RATE = 0.55;
+
+  function spawn(){
+    if (!IMG.arte || !IMG.arte.length) return;
+
+    const img = pick(IMG.arte);
+    const scale = rand(0.07, 0.10);
+
+    drops.push({
+      img,
+      x: rand(-120, W+120),
+      y: rand(-H, 0),
+      vy: rand(420, 820),
+      scale,
+      rot: rand(0, TAU),
+      spin: rand(-1.2, 1.2),
+    });
+  }
+
+  function ensureTargetCount(){
+    const targetCount = Math.round(cfg.baseCount * intensity);
+    while (drops.length < targetCount) spawn();
+  }
+
+  function setIntensity(v){
+    targetIntensity = Math.max(0, Math.min(1, v));
+  }
+
+  return {
+    start(){ drops.length = 0; intensity = 0; targetIntensity = 0; },
+    setIntensity,
+    update(dt){
+      intensity += (targetIntensity - intensity) * (1 - Math.exp(-RAMP_RATE * dt));
+
+      ensureTargetCount();
+
+      for (let i=drops.length-1; i>=0; i--){
+        const d = drops[i];
+        d.vy += cfg.grav * dt;
+        d.y  += d.vy * dt;
+        d.rot += d.spin * dt;
+
+        if (d.y > H + 200){
+          drops.splice(i,1);
+          const targetCount = Math.round(cfg.baseCount * intensity);
+          if (drops.length < targetCount) spawn();
+        }
+      }
+    },
+    draw(){
+      for (const d of drops){
+        const im = d.img;
+        if (!im.complete || !im.naturalWidth) continue;
+        const w = im.naturalWidth  * d.scale;
+        const h = im.naturalHeight * d.scale;
+
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        ctx.rotate(d.rot);
+        ctx.drawImage(im, -w/2, -h/2, w, h);
+        ctx.restore();
+      }
+    }
+  };
+}
   function makeSnow(){
-    const flakes = [];
-    let cfg = null;
+  const flakes = [];
+  let cfg = null;
 
-    function setRandomSnowMode(){
-      if (WX.wind){
-        cfg = { count: 520, wind: rand(-190,-90), grav: rand(260,520), drift: 3.2, sway: 2.1 };
-        return;
+  let intensity = 0;
+  let targetIntensity = 0;
+  const RAMP_RATE = 0.55;
+
+  function setRandomSnowMode(){
+    if (WX.wind){
+      cfg = { baseCount: 520, wind: rand(-190,-90), grav: rand(260,520), drift: 3.2, sway: 2.1 };
+      return;
+    }
+    const blizzard = Math.random() < WX.snowBlizzardChance;
+    cfg = blizzard
+      ? { baseCount: 380, wind: rand(-140,-60), grav: rand(220,420), drift: 2.6, sway: 1.8 }
+      : { baseCount: 190, wind: rand(-45, 15),  grav: rand(80, 170),  drift: 1.2, sway: 1.0 };
+  }
+
+  function spawn(){
+    const img = pick(IMG.snow);
+    const scale = (img === IMG.snow[0]) ? rand(0.08,0.18) : rand(0.06,0.16);
+    flakes.push({
+      img, x: rand(-60, W+60), y: rand(-H, 0),
+      vx: rand(cfg.wind-30, cfg.wind+30),
+      vy: rand(cfg.grav*0.7, cfg.grav*1.4),
+      scale, phase: rand(0, TAU),
+      spin: rand(-0.35, 0.35),
+      rot: rand(0, TAU),
+    });
+  }
+
+  function ensureTargetCount(){
+    const targetCount = Math.round(cfg.baseCount * intensity);
+    while (flakes.length < targetCount) spawn();
+  }
+
+  function setIntensity(v){
+    targetIntensity = Math.max(0, Math.min(1, v));
+  }
+
+  return {
+    start(){ setRandomSnowMode(); flakes.length = 0; intensity = 0; targetIntensity = 0; },
+    setIntensity,
+    update(dt, tSec){
+      if (!cfg) setRandomSnowMode();
+
+      intensity += (targetIntensity - intensity) * (1 - Math.exp(-RAMP_RATE * dt));
+      ensureTargetCount();
+
+      for (let i=flakes.length-1; i>=0; i--){
+        const f = flakes[i];
+        const sway = Math.sin(f.phase + tSec*cfg.sway) * (22 * cfg.drift);
+        f.x += (f.vx * dt) + (sway * dt);
+        f.y += f.vy * dt;
+        f.rot += f.spin * dt;
+
+        if (f.y > H + 120 || f.x < -220 || f.x > W + 220){
+          flakes.splice(i,1);
+          const targetCount = Math.round(cfg.baseCount * intensity);
+          if (flakes.length < targetCount) spawn();
+        }
       }
-      const blizzard = Math.random() < WX.snowBlizzardChance;
-      cfg = blizzard
-        ? { count: 380, wind: rand(-140,-60), grav: rand(220,420), drift: 2.6, sway: 1.8 }
-        : { count: 190, wind: rand(-45, 15),  grav: rand(80, 170),  drift: 1.2, sway: 1.0 };
-    }
+    },
+    draw(){
+      for (const f of flakes){
+        const im = f.img;
+        if (!im.complete || !im.naturalWidth) continue;
+        const w = im.naturalWidth  * f.scale;
+        const h = im.naturalHeight * f.scale;
 
-    function spawn(){
-      const img = pick(IMG.snow);
-      const scale = (img === IMG.snow[0]) ? rand(0.08,0.18) : rand(0.06,0.16);
-      flakes.push({
-        img, x: rand(-60, W+60), y: rand(-H, 0),
-        vx: rand(cfg.wind-30, cfg.wind+30),
-        vy: rand(cfg.grav*0.7, cfg.grav*1.4),
-        scale, phase: rand(0, TAU),
-        spin: rand(-0.35, 0.35),
-        rot: rand(0, TAU),
-      });
-    }
-
-    function ensure(){
-      while (flakes.length < cfg.count) spawn();
-      while (flakes.length > cfg.count) flakes.pop();
-    }
-
-    return {
-      start(){ setRandomSnowMode(); flakes.length = 0; ensure(); },
-      update(dt, tSec){
-        ensure();
-        for (let i=flakes.length-1; i>=0; i--){
-          const f = flakes[i];
-          const sway = Math.sin(f.phase + tSec*cfg.sway) * (22 * cfg.drift);
-          f.x += (f.vx * dt) + (sway * dt);
-          f.y += f.vy * dt;
-          f.rot += f.spin * dt;
-          if (f.y > H + 120 || f.x < -220 || f.x > W + 220){
-            flakes.splice(i,1); spawn();
-          }
-        }
-      },
-      draw(alpha){
-        if (alpha <= 0.001) return;
         ctx.save();
-        ctx.globalAlpha = alpha;
-        for (const f of flakes){
-          const im = f.img;
-          if (!im.complete || !im.naturalWidth) continue;
-          const w = im.naturalWidth  * f.scale;
-          const h = im.naturalHeight * f.scale;
-          ctx.save();
-          ctx.translate(f.x, f.y);
-          ctx.rotate(f.rot);
-          ctx.drawImage(im, -w/2, -h/2, w, h);
-          ctx.restore();
-        }
+        ctx.translate(f.x, f.y);
+        ctx.rotate(f.rot);
+        ctx.drawImage(im, -w/2, -h/2, w, h);
         ctx.restore();
       }
-    };
-  }
+    }
+  };
+}
 
   function makeClouds(){
     const clouds = [];
@@ -2618,6 +2685,7 @@ window.addEventListener("load", () => setBlackPreview("A1"));
   let running = false;
   let tSec = 0;
   let lastMs = null;
+  let rainbowAlpha = 0; // 0..1, eigener Fade für Regenbogen
 
   let gustBoost = 1;
   let gustBoostT = 0;
@@ -2627,11 +2695,6 @@ window.addEventListener("load", () => setBlackPreview("A1"));
   let skyCloudsOn = false;
 
   let precipCurr = "none";
-  let precipNext = null;
-
-  let precipFading = false;
-  let precipT = 1;
-  let precipDur = 3.2;
 
   let nextSwitchAt = 0;
   function scheduleNext(){ nextSwitchAt = tSec + rand(10, 60); }
@@ -2694,22 +2757,23 @@ window.addEventListener("load", () => setBlackPreview("A1"));
     ctx.clearRect(0,0,W,H);
   }
 
-  function beginPrecipFadeTo(type){
-    if (type === precipCurr) { scheduleNext(); return; }
-    precipNext = type;
-    precipFading = true;
-    precipT = 0;
-    precipDur = rand(2.6, 4.2);
-    if (precipNext !== "none") ENGINES[precipNext].start();
+  function setPrecip(type){
+  type = type || "none";
+  if (type === precipCurr) { scheduleNext(); return; }
+
+  // alte precipitation auslaufen lassen
+  if (precipCurr !== "none") ENGINES[precipCurr]?.setIntensity?.(0);
+
+  precipCurr = type;
+
+  // neue precipitation “vereinzelt” starten
+  if (precipCurr !== "none"){
+    ENGINES[precipCurr].start();
+    ENGINES[precipCurr].setIntensity(1);
   }
 
-  function commitPrecip(){
-    precipCurr = precipNext;
-    precipNext = null;
-    precipFading = false;
-    precipT = 1;
-    scheduleNext();
-  }
+  scheduleNext();
+}
 
   function frame(ms){
     requestAnimationFrame(frame);
@@ -2723,7 +2787,7 @@ window.addEventListener("load", () => setBlackPreview("A1"));
     if (tSec >= nextSwitchAt){
       setWind(Math.random() < 0.25);
       toggleSkyRandom();
-      beginPrecipFadeTo(pickPrecipNext());
+      setPrecip(pickPrecipNext());
       updateWeatherAudio();
     }
 
@@ -2738,36 +2802,28 @@ window.addEventListener("load", () => setBlackPreview("A1"));
     if (precipCurr !== "none") ENGINES[precipCurr].update?.(dt, tSec);
     if (precipNext && precipNext !== "none") ENGINES[precipNext].update?.(dt, tSec);
 
-    ctx.clearRect(0,0,W,H);
+   ctx.clearRect(0,0,W,H);
 
-       const sunAlpha = skyCloudsOn ? 0.38 : 1.0;
+const sunAlpha = skyCloudsOn ? 0.38 : 1.0;
 
-// Sonne zuerst
+// Sonne zuerst (behält Fade aus makeSun)
 if (skySunOn) ENGINES.sun.draw?.(sunAlpha);
 
-// --- Regenbogen: Sonne + Regen gleichzeitig ---
-// Regen-Sichtbarkeit bestimmen (auch während Fade)
-let rainAlpha = 0;
+// Regenbogen-Fade (unabhängig von Precip-Alpha)
+const wantRainbow = skySunOn && (precipCurr === "rain");
+const rbTarget = wantRainbow ? 1 : 0;
+// 0.9 = recht flott, 0.5 = langsamer
+rainbowAlpha += (rbTarget - rainbowAlpha) * (1 - Math.exp(-0.9 * dt));
 
-if (precipFading){
-  // (precipT / aNext / aCurr werden weiter unten in deinem Fade-Block berechnet)
-  // → wir setzen rainAlpha später, sobald aCurr/aNext existieren
-} else {
-  if (precipCurr === "rain") rainAlpha = 1;
+if (rainbowAlpha > 0.01){
+  drawRainbow(Math.min(1, rainbowAlpha) * 0.85);
 }
 
-// Regenbogen VOR Wolken zeichnen (damit er dahinter liegt)
-if (skySunOn && rainAlpha > 0.02){
-  drawRainbow(Math.min(1, rainAlpha) * 0.85);
-}
-
-// Wolken danach
+// Wolken danach (behält Fade pro Wolke aus makeClouds)
 if (skyCloudsOn) ENGINES.clouds.draw?.(1);
 
-if (precipCurr === "rain") rainAlpha += aCurr;
-if (precipNext === "rain") rainAlpha += aNext;
-
-
+// Niederschlag zuletzt (ohne Transparenz-Fade; Engine macht Dichte-Ramp)
+if (precipCurr !== "none") ENGINES[precipCurr].draw?.();
 
   }
 
