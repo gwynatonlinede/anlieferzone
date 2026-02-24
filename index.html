@@ -1099,9 +1099,9 @@ let GROUP_MAX = pickGroupMax();
 function pickMode(prev){
   const r = Math.random();
 
-  // ✅ mehr MID, weniger TINY, HUGE bleibt selten
-  // 65% TINY, 33% MID, 2% HUGE
-  let m = (r < 0.65) ? "TINY" : (r < 0.98) ? "MID" : "HUGE";
+  //STELLSCHRAUBEN//
+  // 63% TINY, 34% MID, 3% HUGE  ← nur minimal mehr große
+  let m = (r < 0.62) ? "TINY" : (r < 0.92) ? "MID" : "HUGE";
 
   // optional: nicht 6x dasselbe am Stück (verhindert Muster)
   if (prev && m === prev && Math.random() < 0.35){
